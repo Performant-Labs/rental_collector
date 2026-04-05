@@ -310,12 +310,12 @@ def _task(label: str, site: str, extra: str = "") -> dict:
     }
 
 CLAUDE_SEARCH_TASKS = [
-    _task("amyrex",       "https://www.amyrex.net",
-          "Focus on the rentals / long-term section."),
-    _task("bajaprops",    "https://www.bajaproperties.com/todos-santos",
+    _task("amyrex",    "https://amyrextodossantos.com/long-term-rentals",
+          "Focus on long-term rentals only, not vacation rentals."),
+    _task("bajaprops", "https://bajaproperties.com/todos-santos",
           "Focus on rentals, not sales."),
-    _task("ts-realty",    "https://www.todossantosrealty.com",
-          "Focus on rentals, not sales."),
+    _task("baraka",    "https://barakaentodos.com",
+          "Focus on long-term rentals, not short-term vacation rentals."),
 ]
 
 
