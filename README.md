@@ -4,29 +4,31 @@ A local database of long-term rentals in Todos Santos, Baja California Sur, Mexi
 
 ---
 
-## What's in the box
+## Typical workflow
 
-```
-Todos Santos Rentals/
-├── rental_search.py          # Main search + scrape script
-├── download_photos.py        # Download Airbnb photos to local folders
-├── test_rental_search.py     # Unit tests
-└── rentals/
-    ├── airbnb-01-studio-1339usd/       # One folder per listing
-    │   ├── info.json                   # Normalized metadata
-    │   ├── listing.html                # Rendered card (open in browser)
-    │   ├── photo_01.jpg
-    │   └── …
-    ├── craigslist-01-…/                # Same structure for other sources
-    ├── airbnb-2026-04-05.json          # Per-source summary for analysis/diffing
-    ├── craigslist-2026-04-05.json
-    └── …
+**Weekly search for new listings:**
+```bash
+python3 rental_search.py --diff   # search, save, and show what's new
 ```
 
-Each listing — regardless of source — is stored in a **folder** and a **summary JSON file**:
+**Browse a listing:**
+Open any `rentals/{source}-*/listing.html` in a browser.
 
-- **Folder** (`{source}-{n}-{slug}-{price}usd/`) — for browsing. Open `listing.html` in any browser.
-- **Summary JSON** (`{source}-YYYY-MM-DD.json`) — a flat array of all listings from that source on that date, for scripting, diffing, and analysis.
+**After adding a new Airbnb listing manually:**
+```bash
+python3 download_photos.py        # pull photos from CDN, rewrite listing.html
+```
+
+**Analyze listings across sources:**
+```python
+import json, pathlib
+
+listings = []
+for f in pathlib.Path("rentals").glob("*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].json"):
+    listings.extend(json.loads(f.read_text()))
+
+under_1k = [l for l in listings if l["price_usd"] and l["price_usd"] < 1000]
+```
 
 ---
 
@@ -108,6 +110,32 @@ Run from inside the project folder. Each listing folder gets up to 6 photos (`ph
 
 ---
 
+## What's in the box
+
+```
+Todos Santos Rentals/
+├── rental_search.py          # Main search + scrape script
+├── download_photos.py        # Download Airbnb photos to local folders
+├── test_rental_search.py     # Unit tests
+└── rentals/
+    ├── airbnb-01-studio-1339usd/       # One folder per listing
+    │   ├── info.json                   # Normalized metadata
+    │   ├── listing.html                # Rendered card (open in browser)
+    │   ├── photo_01.jpg
+    │   └── …
+    ├── craigslist-01-…/                # Same structure for other sources
+    ├── airbnb-2026-04-05.json          # Per-source summary for analysis/diffing
+    ├── craigslist-2026-04-05.json
+    └── …
+```
+
+Each listing — regardless of source — is stored in a **folder** and a **summary JSON file**:
+
+- **Folder** (`{source}-{n}-{slug}-{price}usd/`) — for browsing. Open `listing.html` in any browser.
+- **Summary JSON** (`{source}-YYYY-MM-DD.json`) — a flat array of all listings from that source on that date, for scripting, diffing, and analysis.
+
+---
+
 ## Listing schema
 
 Every `info.json` — across all sources — uses the same fields:
@@ -131,35 +159,6 @@ Every `info.json` — across all sources — uses the same fields:
 | `localPhotos` | array | Filenames of downloaded photos, e.g. `["photo_01.jpg"]` |
 
 MXN prices are converted to USD at **17.5 MXN/USD**. Listings over $1,500/month are excluded automatically.
-
----
-
-## Typical workflow
-
-**First time — set up Airbnb listings:**
-```bash
-# (Airbnb folders were added manually — see rentals/airbnb-*/)
-python3 download_photos.py        # pull photos from CDN
-```
-
-**Weekly search for new listings:**
-```bash
-python3 rental_search.py --diff   # search, save, and show what's new
-```
-
-**Browse a listing:**
-Open any `rentals/{source}-*/listing.html` in a browser.
-
-**Analyze listings across sources:**
-```python
-import json, pathlib
-
-listings = []
-for f in pathlib.Path("rentals").glob("*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].json"):
-    listings.extend(json.loads(f.read_text()))
-
-under_1k = [l for l in listings if l["price_usd"] and l["price_usd"] < 1000]
-```
 
 ---
 

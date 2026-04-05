@@ -191,7 +191,7 @@ def scrape_craigslist() -> List[dict]:
 
     for item in soup.select("li.cl-static-search-result"):
         title_el = item.select_one(".title")
-        price_el = item.select_one(".priceinfo")
+        price_el = item.select_one(".price")
         link_el  = item.select_one("a")
         if not title_el:
             continue
@@ -215,38 +215,57 @@ def scrape_craigslist() -> List[dict]:
     return listings
 
 
-def scrape_todos_santos_cc() -> List[dict]:
-    """TodosSantos.cc — try classifieds / housing sections."""
-    listings = []
-    candidates = [
-        "https://www.todossantos.cc/classifieds/",
-        "https://www.todossantos.cc/housing/",
-        "https://www.todossantos.cc/rentals/",
-    ]
-    for url in candidates:
-        soup = get_soup(url)
-        if not soup:
-            continue
-        for el in soup.find_all(string=re.compile(r"rent|rental|for rent", re.I)):
-            parent = el.find_parent(["li", "article", "div", "p"])
-            if not parent:
-                continue
-            text      = parent.get_text(" ", strip=True)[:300]
-            price_usd = _parse_price_usd(text)
-            if price_usd is not None and price_usd > MAX_USD:
-                continue
-            link = parent.find("a")
-            href = link["href"] if link else url
-            if not href.startswith("http"):
-                href = "https://www.todossantos.cc" + href
-            listings.append(normalise({
-                "title":       text[:80],
-                "price_usd":   price_usd,
-                "url":         href,
-                "description": text,
-            }, "todossantos"))
-        time.sleep(0.5)
+_RENTAL_KEYWORDS = re.compile(
+    r"rent|rental|for rent|se renta|se alquila|casa|cuarto|habitaci[oó]n|apartment|studio|bedroom",
+    re.I,
+)
 
+
+def scrape_todos_santos_cc() -> List[dict]:
+    """TodosSantos.cc classifieds — structural parse of div.classifieds_container div.item."""
+    listings = []
+    url = "https://todossantos.cc/classifieds/"
+    soup = get_soup(url)
+    if not soup:
+        return listings
+
+    for item in soup.select("div.classifieds_container div.item"):
+        title_el   = item.select_one(".title")
+        content_el = item.select_one(".content")
+        contact_el = item.select_one(".contact")
+
+        title   = title_el.get_text(strip=True)        if title_el   else ""
+        content = content_el.get_text(" ", strip=True) if content_el else ""
+
+        # Only keep posts that mention renting/housing
+        if not _RENTAL_KEYWORDS.search(title) and not _RENTAL_KEYWORDS.search(content):
+            continue
+
+        # Contact sub-fields
+        contact_text = ""
+        if contact_el:
+            phone_el = contact_el.select_one(".phone")
+            email_el = contact_el.select_one(".email")
+            parts = []
+            if phone_el:
+                parts.append(phone_el.get_text(strip=True))
+            if email_el:
+                parts.append(email_el.get_text(strip=True))
+            contact_text = " | ".join(parts) if parts else contact_el.get_text(" ", strip=True)
+
+        price_usd = _parse_price_usd(title + " " + content)
+        if price_usd is not None and price_usd > MAX_USD:
+            continue
+
+        listings.append(normalise({
+            "title":       title or content[:80],
+            "price_usd":   price_usd,
+            "url":         url,   # no per-post URLs; link back to classifieds page
+            "description": content,
+            "contact":     contact_text or None,
+        }, "todossantos"))
+
+    time.sleep(0.5)
     return listings
 
 
@@ -258,7 +277,8 @@ def _parse_price_usd(text: str) -> Optional[int]:
         val = int(m.group(1))
         if val < 100:
             return None
-        if val > 50_000:
+        # Values above $4,000 on a Baja listing are almost certainly MXN
+        if val > 4_000:
             return round(val / 17.5)
         return val
     m = re.search(r"(\d{4,6})\s*(?:mxn|pesos?)", text, re.I)
@@ -415,7 +435,8 @@ def print_report(listings: List[dict]):
         desc    = l.get("description") or ""
 
         print(f"\n  {i:>2}. {title}")
-        print(f"      {price}  ·  {beds} bed  ·  {loc}  ·  [{src}]")
+        beds_label = beds if (beds == "?" or re.search(r"bed|bath|BR", beds, re.I)) else f"{beds} bed"
+        print(f"      {price}  ·  {beds_label}  ·  {loc}  ·  [{src}]")
         if url:
             print(f"      {url}")
         if contact:
@@ -502,8 +523,15 @@ def _folder_name(listing: dict, index: int) -> str:
 
 def _scan_existing(source: str) -> dict:
     """Scan saved folders for a source and return a lookup keyed by both URL
-    and title_key.  Each value: {"folder": Path, "price": int|None}."""
-    index: dict = {}
+    and title_key.  Each value: {"folder": Path, "price": int|None}.
+
+    URLs that appear in more than one folder (e.g. a shared classifieds-page
+    URL used by every todossantos.cc listing) are NOT added to the URL index —
+    only title_key dedup is used for those.
+    """
+    # First pass: collect entries and count how many folders share each URL.
+    entries = []
+    url_counts: dict = {}
     for folder in RESULTS_DIR.glob(f"{source}-*/"):
         if not folder.is_dir():
             continue
@@ -514,9 +542,19 @@ def _scan_existing(source: str) -> dict:
             d = json.loads(info_path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        entry = {"folder": folder, "price": d.get("price_usd")}
+        entry = {"folder": folder, "price": d.get("price_usd"), "data": d}
+        entries.append(entry)
         if d.get("url"):
-            index[d["url"]] = entry
+            url_counts[d["url"]] = url_counts.get(d["url"], 0) + 1
+
+    # Second pass: build the lookup index.
+    index: dict = {}
+    for entry in entries:
+        d = entry.pop("data")
+        url = d.get("url")
+        # Only use URL as a key when it uniquely identifies one folder.
+        if url and url_counts.get(url, 0) == 1:
+            index[url] = entry
         tkey = _listing_key(d)
         if tkey:
             index.setdefault(tkey, entry)   # URL takes priority; don't overwrite
@@ -525,30 +563,47 @@ def _scan_existing(source: str) -> dict:
 
 def _next_index(source: str) -> int:
     """Return the next available numeric index for a source's folders."""
-    existing = list(RESULTS_DIR.glob(f"{source}-[0-9][0-9]-*/"))
-    return len(existing) + 1
+    pattern = re.compile(rf"^{re.escape(source)}-(\d+)-")
+    indices = []
+    for p in RESULTS_DIR.glob(f"{source}-[0-9][0-9]-*/"):
+        if not p.is_dir():
+            continue
+        m = pattern.match(p.name)
+        if m:
+            indices.append(int(m.group(1)))
+    return (max(indices) + 1) if indices else 1
+
+
+def _esc(text: str) -> str:
+    """Minimal HTML escaping for text interpolated into HTML."""
+    return (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+    )
 
 
 def generate_listing_html(listing: dict) -> str:
     source      = listing.get("source", "")
     color       = SOURCE_COLORS.get(source, "#444")
-    title       = listing.get("title") or "Untitled"
+    title       = _esc(listing.get("title") or "Untitled")
     price       = listing.get("price_usd")
     price_str   = f"${price}" if price else "—"
-    bedrooms    = listing.get("bedrooms") or ""
-    location    = listing.get("location") or "Todos Santos"
-    rating      = listing.get("rating") or ""
-    listing_type = listing.get("listing_type") or ""
-    description  = listing.get("description") or ""
+    bedrooms    = _esc(listing.get("bedrooms") or "")
+    location    = _esc(listing.get("location") or "Todos Santos")
+    rating      = _esc(listing.get("rating") or "")
+    listing_type = _esc(listing.get("listing_type") or "")
+    description  = _esc(listing.get("description") or "")
     amenities    = listing.get("amenities") or []
-    checkin      = listing.get("checkin") or ""
-    checkout     = listing.get("checkout") or ""
+    checkin      = _esc(listing.get("checkin") or "")
+    checkout     = _esc(listing.get("checkout") or "")
     url          = listing.get("url") or ""
-    contact      = listing.get("contact") or ""
-    scraped      = listing.get("scraped") or TODAY
+    contact      = _esc(listing.get("contact") or "")
+    scraped      = _esc(listing.get("scraped") or TODAY)
     local_photos = listing.get("localPhotos") or []
 
-    source_label = source.replace("-", " ").title()
+    source_label = _esc(source.replace("-", " ").title())
     cta_label    = f"View on {source_label} →" if url else ""
 
     # Photo block
@@ -872,8 +927,24 @@ def main():
             print("Searching via claude CLI …")
             source_results["claude-cli"] = search_with_claude_cli()
         else:
-            print("Searching via Claude API …")
-            source_results["claude-api"] = search_with_claude_api()
+            # Auto-detect: prefer API when both the package and key are present;
+            # fall back to the CLI silently; warn only when neither is usable.
+            api_ready = anthropic is not None and bool(os.environ.get("ANTHROPIC_API_KEY"))
+            cli_ready = os.path.isfile(CLAUDE_CLI_PATH)
+
+            if api_ready:
+                print("Searching via Claude API …")
+                source_results["claude-api"] = search_with_claude_api()
+            elif cli_ready:
+                print("Searching via claude CLI …")
+                source_results["claude-cli"] = search_with_claude_cli()
+            else:
+                print(
+                    "  [claude] Skipping — neither API nor CLI is available.\n"
+                    "  To enable:  pip install anthropic  and set ANTHROPIC_API_KEY\n"
+                    "              OR  npm install -g @anthropic-ai/claude-code",
+                    file=sys.stderr,
+                )
 
     # Merge all sources for the combined report
     listings = merge_listings(list(source_results.values()))

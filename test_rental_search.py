@@ -175,9 +175,17 @@ class TestParsePriceUsd(unittest.TestCase):
         self.assertIsNone(rs._parse_price_usd("$75/night"))
 
     def test_large_dollar_treated_as_mxn(self):
+        # $55,000 is above the 4,000 threshold → treated as MXN
         result = rs._parse_price_usd("$55,000")
         self.assertIsNotNone(result)
         self.assertLess(result, 5000)
+
+    def test_craigslist_peso_price(self):
+        # $18,000 on Baja Craigslist is MXN → ~$1,028 USD
+        result = rs._parse_price_usd("$18,000")
+        self.assertIsNotNone(result)
+        self.assertEqual(result, round(18000 / 17.5))
+        self.assertLess(result, rs.MAX_USD)
 
     def test_mxn_explicit(self):
         self.assertEqual(rs._parse_price_usd("17500 MXN/month"), 1000)
@@ -454,7 +462,7 @@ class TestScrapeCreaigslist(unittest.TestCase):
           <li class="cl-static-search-result">
             <a href="{href}">
               <span class="title">{title}</span>
-              <span class="priceinfo">{price}</span>
+              <span class="price">{price}</span>
             </a>
           </li>
         </ul>
@@ -495,6 +503,91 @@ class TestScrapeCreaigslist(unittest.TestCase):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup("<ul></ul>", "html.parser")
         self.assertEqual(rs.scrape_craigslist(), [])
+
+
+# ── scrape_todos_santos_cc ────────────────────────────────────────────────────
+
+class TestScrapeTodosSantosCc(unittest.TestCase):
+
+    def _make_html(self, title="Casa for rent near centro", content="2BR house $900/mo",
+                   phone="612-111-2222", email="owner@example.com"):
+        return f"""
+        <div class="classifieds_container">
+          <div class="item">
+            <div class="title">{title}</div>
+            <div class="content">{content}</div>
+            <div class="contact">
+              <div class="phone">{phone}</div>
+              <div class="email">{email}</div>
+            </div>
+          </div>
+        </div>
+        """
+
+    @patch("rental_search.get_soup")
+    def test_parses_rental_item(self, mock_soup):
+        from bs4 import BeautifulSoup
+        mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
+        result = rs.scrape_todos_santos_cc()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["title"], "Casa for rent near centro")
+        self.assertEqual(result[0]["price_usd"], 900)
+        self.assertEqual(result[0]["source"], "todossantos")
+        self.assertIn("612-111-2222", result[0]["contact"])
+        self.assertIn("owner@example.com", result[0]["contact"])
+
+    @patch("rental_search.get_soup")
+    def test_skips_non_rental_items(self, mock_soup):
+        from bs4 import BeautifulSoup
+        html = """
+        <div class="classifieds_container">
+          <div class="item">
+            <div class="title">Surfboard for sale</div>
+            <div class="content">Great condition, $200</div>
+          </div>
+        </div>
+        """
+        mock_soup.return_value = BeautifulSoup(html, "html.parser")
+        self.assertEqual(rs.scrape_todos_santos_cc(), [])
+
+    @patch("rental_search.get_soup")
+    def test_filters_over_max_price(self, mock_soup):
+        from bs4 import BeautifulSoup
+        mock_soup.return_value = BeautifulSoup(
+            self._make_html(content="Rental house $2000/month"), "html.parser"
+        )
+        self.assertEqual(rs.scrape_todos_santos_cc(), [])
+
+    @patch("rental_search.get_soup", return_value=None)
+    def test_network_failure_returns_empty(self, _):
+        self.assertEqual(rs.scrape_todos_santos_cc(), [])
+
+    @patch("rental_search.get_soup")
+    def test_canonical_keys(self, mock_soup):
+        from bs4 import BeautifulSoup
+        mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
+        result = rs.scrape_todos_santos_cc()
+        expected = {"title", "source", "price_usd", "bedrooms", "location",
+                    "url", "contact", "description", "amenities", "rating",
+                    "listing_type", "checkin", "checkout", "scraped"}
+        self.assertEqual(set(result[0].keys()), expected)
+
+    @patch("rental_search.get_soup")
+    def test_matches_on_content_keyword(self, mock_soup):
+        """Item with no rental keyword in title but 'rental' in content should be included."""
+        from bs4 import BeautifulSoup
+        html = """
+        <div class="classifieds_container">
+          <div class="item">
+            <div class="title">Available now</div>
+            <div class="content">Studio apartment for rent $800/month, furnished</div>
+          </div>
+        </div>
+        """
+        mock_soup.return_value = BeautifulSoup(html, "html.parser")
+        result = rs.scrape_todos_santos_cc()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["price_usd"], 800)
 
 
 # ── save_results / diff_against_previous ──────────────────────────────────────
@@ -680,6 +773,40 @@ class TestGenerateListingHtml(unittest.TestCase):
         html = rs.generate_listing_html(self._listing())
         self.assertIn("<!DOCTYPE html>", html)
         self.assertIn("</html>", html)
+
+
+# ── _next_index ───────────────────────────────────────────────────────────────
+
+class TestNextIndex(unittest.TestCase):
+
+    def setUp(self):
+        import tempfile
+        self._tmp = Path(tempfile.mkdtemp())
+        self._orig_dir = rs.RESULTS_DIR
+        rs.RESULTS_DIR = self._tmp
+
+    def tearDown(self):
+        rs.RESULTS_DIR = self._orig_dir
+        import shutil
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_returns_1_when_empty(self):
+        self.assertEqual(rs._next_index("craigslist"), 1)
+
+    def test_returns_next_after_existing(self):
+        (self._tmp / "craigslist-01-studio-900usd").mkdir()
+        (self._tmp / "craigslist-02-house-1100usd").mkdir()
+        self.assertEqual(rs._next_index("craigslist"), 3)
+
+    def test_uses_max_not_count_when_gap_exists(self):
+        """If folder 02 was deleted, next index should be 3 (max+1), not 2 (count+1)."""
+        (self._tmp / "craigslist-01-studio-900usd").mkdir()
+        (self._tmp / "craigslist-03-house-1100usd").mkdir()
+        self.assertEqual(rs._next_index("craigslist"), 4)
+
+    def test_ignores_other_sources(self):
+        (self._tmp / "airbnb-05-place-900usd").mkdir()
+        self.assertEqual(rs._next_index("craigslist"), 1)
 
 
 # ── save_listing_folder ───────────────────────────────────────────────────────
@@ -870,6 +997,25 @@ class TestScanExisting(unittest.TestCase):
 
     def test_empty_when_no_folders(self):
         self.assertEqual(rs._scan_existing("craigslist"), {})
+
+    def test_shared_url_not_indexed_by_url(self):
+        """When multiple folders share a URL (e.g. todossantos classifieds page),
+        the URL must NOT be used as a dedup key — only title_key dedup applies."""
+        shared_url = "https://todossantos.cc/classifieds/"
+        self._write_folder("todossantos-01-casa-rent-800usd",
+                           {"url": shared_url, "price_usd": 800,
+                            "title": "Casa for rent", "source": "todossantos"})
+        self._write_folder("todossantos-02-studio-rent-700usd",
+                           {"url": shared_url, "price_usd": 700,
+                            "title": "Studio for rent", "source": "todossantos"})
+        index = rs._scan_existing("todossantos")
+        # URL should NOT appear since it's shared
+        self.assertNotIn(shared_url, index)
+        # Each title_key should still be present
+        tkey1 = rs._listing_key({"title": "Casa for rent", "source": "todossantos"})
+        tkey2 = rs._listing_key({"title": "Studio for rent", "source": "todossantos"})
+        self.assertIn(tkey1, index)
+        self.assertIn(tkey2, index)
 
 
 class TestUpdateListingFolder(unittest.TestCase):
