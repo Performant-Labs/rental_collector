@@ -311,7 +311,9 @@ def _task(label: str, site: str, extra: str = "") -> dict:
 
 CLAUDE_SEARCH_TASKS = [
     _task("amyrex",    "https://amyrextodossantos.com/long-term-rentals",
-          "Focus on long-term rentals only, not vacation rentals."),
+          "Fetch ONLY this exact URL — do NOT follow links to the homepage or "
+          "vacation-rentals pages. Exclude any property with a nightly rate "
+          "(those are vacation rentals). Only include monthly long-term rentals."),
     _task("bajaprops", "https://bajaproperties.com/todos-santos",
           "Focus on rentals, not sales."),
     _task("baraka",    "https://barakaentodos.com",
