@@ -590,16 +590,19 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         self.assertEqual(result[0]["price_usd"], 800)
 
     @patch("rental_search.get_soup")
-    def test_skips_tour_ad_with_casa_but_no_price(self, mock_soup):
-        """Regression: city-tour ad mentioning 'casa' in description but no price must be
-        excluded — 'casa' alone is a weak signal and requires an accompanying price."""
+    def test_skips_tour_ad_with_different_keyword_substring(self, mock_soup):
+        """Regression: 'different' contains 'rent' as a substring — keyword matching must
+        use word boundaries so tour/event ads are not falsely matched.
+        Real-world case: LocoMotion city-tour ad on todossantos.cc/classifieds/."""
         from bs4 import BeautifulSoup
         html = """
         <div class="classifieds_container">
           <div class="item">
             <div class="title">City Tour, Tacos &amp; Drinks</div>
             <div class="content">A fun way to explore Todos Santos on a pedal-powered group
-              bike, with local stops at Casa Dracula and great stories. 6 spots available.</div>
+              bike, with local stops, great stories, drinks. If you're looking for a
+              different way to experience the town, this one's for you. 169usd per person.
+              www.locomotionbaja.com</div>
           </div>
         </div>
         """

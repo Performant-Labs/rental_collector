@@ -220,11 +220,12 @@ def scrape_craigslist() -> List[dict]:
 # be a photo studio, etc.).  A weak-only match is accepted only when there is
 # also a recognisable price, cutting false positives like city-tour ads.
 _RENTAL_KEYWORDS_STRONG = re.compile(
-    r"rent|rental|for rent|se renta|se alquila|cuarto|habitaci[oó]n|apartment|bedroom",
+    r"\brent\b|\brental\b|\bfor\s+rent\b|\bse\s+renta\b|\bse\s+alquila\b"
+    r"|\bcuarto\b|\bhabitaci[oó]n\b|\bapartment\b|\bbedroom\b",
     re.I,
 )
 _RENTAL_KEYWORDS_WEAK = re.compile(
-    r"casa|studio",
+    r"\bcasa\b|\bstudio\b",
     re.I,
 )
 
