@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+
+# Listing data — tracked locally, not in git
+rentals/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
