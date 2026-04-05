@@ -358,14 +358,14 @@ def search_with_claude_cli() -> List[dict]:
             [CLAUDE_CLI_PATH, "--print", prompt],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
             env={**os.environ, "PATH": f"/opt/homebrew/bin:{os.environ.get('PATH', '')}"},
         )
     except FileNotFoundError:
         print(f"  [claude-cli] could not execute {CLAUDE_CLI_PATH}", file=sys.stderr)
         return []
     except subprocess.TimeoutExpired:
-        print("  [claude-cli] timed out after 120 s", file=sys.stderr)
+        print("  [claude-cli] timed out after 300 s", file=sys.stderr)
         return []
 
     if result.returncode != 0:
