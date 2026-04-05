@@ -392,7 +392,14 @@ def search_with_claude_cli(user_msg: str, label: str = "") -> List[dict]:
         return []
 
     if result.returncode != 0:
-        print(f"  [{tag}] exit {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
+        # Rate-limit message comes on stdout, not stderr
+        out = result.stdout.strip()
+        err = result.stderr.strip()
+        detail = out or err or "(no output)"
+        if "hit your limit" in detail or "resets" in detail:
+            print(f"  [{tag}] ⛔ rate limited — {detail}", file=sys.stderr)
+        else:
+            print(f"  [{tag}] exit {result.returncode}: {detail[:300]}", file=sys.stderr)
         return []
 
     return _parse_claude_output(result.stdout, "claude-cli")
