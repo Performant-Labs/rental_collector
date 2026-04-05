@@ -76,7 +76,8 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-MAX_USD = 1500
+MAX_USD   = 1500
+MIN_MONTHS = 5      # minimum rental term we're interested in
 RESULTS_DIR = Path(__file__).parent / "rentals"
 TODAY = date.today().isoformat()
 
@@ -91,7 +92,8 @@ HEADERS = {
 
 SYSTEM_PROMPT = f"""You are a rental search assistant for Todos Santos, Baja California Sur, Mexico.
 
-Your job is to find long-term rental listings (monthly, 1–12 months) under ${MAX_USD} USD/month.
+Your job is to find long-term rental listings with a minimum term of {MIN_MONTHS} months under ${MAX_USD} USD/month.
+Do NOT include nightly, weekly, or vacation rentals — only monthly rentals available for {MIN_MONTHS}+ months.
 
 For each listing return a JSON object with these exact keys:
   title, price_usd (integer, null if unknown), bedrooms, location (neighborhood if known),
@@ -305,7 +307,8 @@ def _task(label: str, site: str, extra: str = "") -> dict:
         "label": label,
         "user_msg": (
             f"Fetch {site} and list every long-term rental in Todos Santos, "
-            f"Baja California Sur under ${MAX_USD}/month that you find there. "
+            f"Baja California Sur under ${MAX_USD}/month with a minimum term "
+            f"of {MIN_MONTHS} months. Exclude nightly, weekly, and vacation rentals. "
             + (extra + " " if extra else "")
             + f"Today is {TODAY}. Return the JSON array as instructed."
         ),
@@ -458,7 +461,7 @@ def merge_listings(all_lists: List[List[dict]]) -> List[dict]:
 def print_report(listings: List[dict]):
     divider = "─" * 68
     print(f"\n{'═' * 68}")
-    print(f"  TODOS SANTOS RENTALS  ·  under ${MAX_USD}/mo  ·  {TODAY}")
+    print(f"  TODOS SANTOS RENTALS  ·  {MIN_MONTHS}+ months  ·  under ${MAX_USD}/mo  ·  {TODAY}")
     print(f"{'═' * 68}")
     if not listings:
         print("  No listings found.")
