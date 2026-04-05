@@ -316,12 +316,6 @@ CLAUDE_SEARCH_TASKS = [
           "Focus on rentals, not sales."),
     _task("ts-realty",    "https://www.todossantosrealty.com",
           "Focus on rentals, not sales."),
-    _task("fb-rentals",
-          "the Facebook group 'Todos Santos Rentals'",
-          "Include posts from the last 3 months only."),
-    _task("fb-housing",
-          "the Facebook group 'Todos Santos Housing'",
-          "Include posts from the last 3 months only."),
 ]
 
 
