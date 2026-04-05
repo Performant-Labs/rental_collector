@@ -60,6 +60,7 @@ import shutil
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import List, Optional
@@ -296,32 +297,33 @@ def _parse_price_usd(text: str) -> Optional[int]:
 
 # ── Claude search (API SDK or CLI) ────────────────────────────────────────────
 
-# Two focused search tasks — each hits a distinct slice of the web so
-# every call is shorter and faster than one giant prompt.
-# Craigslist and TodosSantos.cc are omitted here because we scrape them
-# directly with dedicated functions.
+def _task(label: str, site: str, extra: str = "") -> dict:
+    """Build a narrow single-source search task."""
+    return {
+        "label": label,
+        "user_msg": (
+            f"Fetch {site} and list every long-term rental in Todos Santos, "
+            f"Baja California Sur under ${MAX_USD}/month that you find there. "
+            + (extra + " " if extra else "")
+            + f"Today is {TODAY}. Return the JSON array as instructed."
+        ),
+    }
+
 CLAUDE_SEARCH_TASKS = [
-    {
-        "label": "agencies",
-        "user_msg": (
-            f"Search for long-term rentals in Todos Santos, Baja California Sur "
-            f"under ${MAX_USD}/month on these real-estate and agency websites: "
-            f"Amy Rex Real Estate (amyrex.net), Todos Santos Realty, Baja Properties, "
-            f"and any other local agency or property-management site you can find. "
-            f"Today is {TODAY}. Return the JSON array as instructed."
-        ),
-    },
-    {
-        "label": "social",
-        "user_msg": (
-            f"Search for long-term rentals in Todos Santos, Baja California Sur "
-            f"under ${MAX_USD}/month in Facebook groups "
-            f"(\'Todos Santos Rentals\', \'Todos Santos Housing\', \'Baja Sur Rentals\') "
-            f"and any other community boards or social platforms you can find. "
-            f"Today is {TODAY}. Return the JSON array as instructed."
-        ),
-    },
+    _task("amyrex",       "https://www.amyrex.net",
+          "Focus on the rentals / long-term section."),
+    _task("bajaprops",    "https://www.bajaproperties.com/todos-santos",
+          "Focus on rentals, not sales."),
+    _task("ts-realty",    "https://www.todossantosrealty.com",
+          "Focus on rentals, not sales."),
+    _task("fb-rentals",
+          "the Facebook group 'Todos Santos Rentals'",
+          "Include posts from the last 3 months only."),
+    _task("fb-housing",
+          "the Facebook group 'Todos Santos Housing'",
+          "Include posts from the last 3 months only."),
 ]
+
 
 CLAUDE_CLI_PATH = shutil.which("claude") or "/opt/homebrew/bin/claude"
 
@@ -371,14 +373,14 @@ def search_with_claude_cli(user_msg: str, label: str = "") -> List[dict]:
             [CLAUDE_CLI_PATH, "--print", prompt],
             capture_output=True,
             text=True,
-            timeout=300,
+            timeout=120,
             env={**os.environ, "PATH": f"/opt/homebrew/bin:{os.environ.get('PATH', '')}"},
         )
     except FileNotFoundError:
         print(f"  [{tag}] could not execute {CLAUDE_CLI_PATH}", file=sys.stderr)
         return []
     except subprocess.TimeoutExpired:
-        print(f"  [{tag}] timed out after 300 s", file=sys.stderr)
+        print(f"  [{tag}] timed out after 120 s", file=sys.stderr)
         return []
 
     if result.returncode != 0:
@@ -472,7 +474,8 @@ def print_report(listings: List[dict]):
         desc    = l.get("description") or ""
 
         print(f"\n  {i:>2}. {title}")
-        beds_label = beds if (beds == "?" or re.search(r"bed|bath|BR", beds, re.I)) else f"{beds} bed"
+        beds_str   = str(beds)
+        beds_label = beds_str if (beds_str == "?" or re.search(r"bed|bath|BR", beds_str, re.I)) else f"{beds_str} bed"
         print(f"      {price}  ·  {beds_label}  ·  {loc}  ·  [{src}]")
         if url:
             print(f"      {url}")
@@ -984,11 +987,19 @@ def main():
                 src_key = "claude-cli"
                 fn = search_with_claude_cli
 
-            print(f"Searching via {src_key} ({len(CLAUDE_SEARCH_TASKS)} tasks) …")
+            print(f"Searching via {src_key} ({len(CLAUDE_SEARCH_TASKS)} tasks, parallel) …")
             combined: List[dict] = []
-            for task in CLAUDE_SEARCH_TASKS:
-                results = fn(user_msg=task["user_msg"], label=task["label"])
-                combined.extend(results)
+            with ThreadPoolExecutor(max_workers=len(CLAUDE_SEARCH_TASKS)) as pool:
+                futures = {
+                    pool.submit(fn, user_msg=task["user_msg"], label=task["label"]): task["label"]
+                    for task in CLAUDE_SEARCH_TASKS
+                }
+                for future in as_completed(futures):
+                    label = futures[future]
+                    try:
+                        combined.extend(future.result())
+                    except Exception as e:
+                        print(f"  [{src_key}/{label}] error: {e}", file=sys.stderr)
             source_results[src_key] = combined
 
     # Merge all sources for the combined report
