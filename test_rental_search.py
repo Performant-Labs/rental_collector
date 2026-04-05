@@ -236,18 +236,29 @@ class TestListingKey(unittest.TestCase):
 
 class TestMergeListings(unittest.TestCase):
 
-    def _listing(self, title, source, price=None):
-        return rs.normalise({"title": title, "price_usd": price}, source)
+    def _listing(self, title, source, price=None, url=None):
+        return rs.normalise({"title": title, "price_usd": price, "url": url}, source)
 
     def test_deduplicates_same_title_source(self):
         a = [self._listing("Studio", "craigslist", 1000)]
         b = [self._listing("Studio", "craigslist", 1000)]
         self.assertEqual(len(rs.merge_listings([a, b])), 1)
 
-    def test_keeps_different_sources(self):
-        a = [self._listing("Studio", "craigslist", 1000)]
-        b = [self._listing("Studio", "todossantos", 1000)]
+    def test_keeps_different_sources_different_urls(self):
+        """Same title, different sources AND different URLs — both should appear."""
+        a = [self._listing("Studio", "craigslist",  1000, url="https://craigslist.org/1")]
+        b = [self._listing("Studio", "todossantos", 1000, url="https://todossantos.cc/1")]
         self.assertEqual(len(rs.merge_listings([a, b])), 2)
+
+    def test_deduplicates_same_url_across_sources(self):
+        """Regression: Claude web-search rediscovers Airbnb listings already in the
+        local database. Listings sharing a URL must collapse regardless of source."""
+        url = "https://www.airbnb.com/rooms/12345"
+        airbnb = [self._listing("Cozy Studio", "airbnb",     1200, url=url)]
+        claude = [self._listing("Cozy Studio", "claude-cli", 1200, url=url)]
+        result = rs.merge_listings([airbnb, claude])
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["source"], "airbnb")
 
     def test_sorted_by_price(self):
         listings = [

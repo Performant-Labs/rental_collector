@@ -432,14 +432,22 @@ def _listing_key(l: dict) -> str:
 
 
 def merge_listings(all_lists: List[List[dict]]) -> List[dict]:
-    seen: set = set()
+    seen_keys: set = set()
+    seen_urls: set = set()
     merged = []
     for lst in all_lists:
         for item in lst:
+            # URL-based dedup: same listing found by multiple sources
+            url = (item.get("url") or "").strip()
+            if url and url in seen_urls:
+                continue
             key = _listing_key(item)
-            if key not in seen:
-                seen.add(key)
-                merged.append(item)
+            if key in seen_keys:
+                continue
+            if url:
+                seen_urls.add(url)
+            seen_keys.add(key)
+            merged.append(item)
     merged.sort(key=lambda l: (l.get("price_usd") or 9999))
     return merged
 
