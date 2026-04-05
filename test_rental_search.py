@@ -589,6 +589,40 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["price_usd"], 800)
 
+    @patch("rental_search.get_soup")
+    def test_skips_tour_ad_with_casa_but_no_price(self, mock_soup):
+        """Regression: city-tour ad mentioning 'casa' in description but no price must be
+        excluded — 'casa' alone is a weak signal and requires an accompanying price."""
+        from bs4 import BeautifulSoup
+        html = """
+        <div class="classifieds_container">
+          <div class="item">
+            <div class="title">City Tour, Tacos &amp; Drinks</div>
+            <div class="content">A fun way to explore Todos Santos on a pedal-powered group
+              bike, with local stops at Casa Dracula and great stories. 6 spots available.</div>
+          </div>
+        </div>
+        """
+        mock_soup.return_value = BeautifulSoup(html, "html.parser")
+        self.assertEqual(rs.scrape_todos_santos_cc(), [])
+
+    @patch("rental_search.get_soup")
+    def test_accepts_casa_listing_with_price(self, mock_soup):
+        """'Casa' + a price is a valid weak match and should still be included."""
+        from bs4 import BeautifulSoup
+        html = """
+        <div class="classifieds_container">
+          <div class="item">
+            <div class="title">Casa Bonita</div>
+            <div class="content">Beautiful casa available, $950/month long-term.</div>
+          </div>
+        </div>
+        """
+        mock_soup.return_value = BeautifulSoup(html, "html.parser")
+        result = rs.scrape_todos_santos_cc()
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["price_usd"], 950)
+
 
 # ── save_results / diff_against_previous ──────────────────────────────────────
 

@@ -215,8 +215,16 @@ def scrape_craigslist() -> List[dict]:
     return listings
 
 
-_RENTAL_KEYWORDS = re.compile(
-    r"rent|rental|for rent|se renta|se alquila|casa|cuarto|habitaci[oó]n|apartment|studio|bedroom",
+# Strong = unambiguously about renting; weak = common words that also appear in
+# tour/event/business ads ("casa" is everywhere in Todos Santos, "studio" could
+# be a photo studio, etc.).  A weak-only match is accepted only when there is
+# also a recognisable price, cutting false positives like city-tour ads.
+_RENTAL_KEYWORDS_STRONG = re.compile(
+    r"rent|rental|for rent|se renta|se alquila|cuarto|habitaci[oó]n|apartment|bedroom",
+    re.I,
+)
+_RENTAL_KEYWORDS_WEAK = re.compile(
+    r"casa|studio",
     re.I,
 )
 
@@ -237,8 +245,14 @@ def scrape_todos_santos_cc() -> List[dict]:
         title   = title_el.get_text(strip=True)        if title_el   else ""
         content = content_el.get_text(" ", strip=True) if content_el else ""
 
-        # Only keep posts that mention renting/housing
-        if not _RENTAL_KEYWORDS.search(title) and not _RENTAL_KEYWORDS.search(content):
+        # Only keep posts that mention renting/housing.
+        # Weak keywords ("casa", "studio") must be accompanied by a price to
+        # avoid pulling in tour ads, events, or business listings.
+        combined = title + " " + content
+        has_strong = bool(_RENTAL_KEYWORDS_STRONG.search(combined))
+        has_weak   = bool(_RENTAL_KEYWORDS_WEAK.search(combined))
+        has_price  = _parse_price_usd(combined) is not None
+        if not has_strong and not (has_weak and has_price):
             continue
 
         # Contact sub-fields
