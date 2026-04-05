@@ -92,20 +92,12 @@ SYSTEM_PROMPT = f"""You are a rental search assistant for Todos Santos, Baja Cal
 
 Your job is to find long-term rental listings (monthly, 1–12 months) under ${MAX_USD} USD/month.
 
-Search the following sources and return every listing you find:
-- TodosSantos.cc classifieds and community board
-- Amy Rex Real Estate (amyrex.net or similar)
-- Baja California Sur Craigslist (bajasur.craigslist.org)
-- Facebook groups: "Todos Santos Rentals", "Todos Santos Housing", "Baja Sur Rentals"
-- Local agency sites like Todos Santos Realty, Baja Properties
-- Any other Todos Santos rental source you can find
-
 For each listing return a JSON object with these exact keys:
   title, price_usd (integer, null if unknown), bedrooms, location (neighborhood if known),
   source (site name), url (direct link or null), contact (email/phone if shown),
   description (full listing text), amenities (array, [] if unknown),
   rating (null), listing_type (null), checkin (null), checkout (null),
-  scraped (today's date "{TODAY}")
+  scraped (today\u2019s date "{TODAY}")
 
 Return ONLY a JSON array of listing objects — no prose, no markdown fences.
 Exclude anything clearly over ${MAX_USD}/month. If price is in MXN, convert at 17.5 MXN/USD.
@@ -304,12 +296,32 @@ def _parse_price_usd(text: str) -> Optional[int]:
 
 # ── Claude search (API SDK or CLI) ────────────────────────────────────────────
 
-CLAUDE_USER_MSG = (
-    f"Search for all long-term rental listings in Todos Santos, "
-    f"Baja California Sur under ${MAX_USD}/month available now "
-    f"or starting within the next 6 months. "
-    f"Today is {TODAY}. Return the JSON array as instructed."
-)
+# Two focused search tasks — each hits a distinct slice of the web so
+# every call is shorter and faster than one giant prompt.
+# Craigslist and TodosSantos.cc are omitted here because we scrape them
+# directly with dedicated functions.
+CLAUDE_SEARCH_TASKS = [
+    {
+        "label": "agencies",
+        "user_msg": (
+            f"Search for long-term rentals in Todos Santos, Baja California Sur "
+            f"under ${MAX_USD}/month on these real-estate and agency websites: "
+            f"Amy Rex Real Estate (amyrex.net), Todos Santos Realty, Baja Properties, "
+            f"and any other local agency or property-management site you can find. "
+            f"Today is {TODAY}. Return the JSON array as instructed."
+        ),
+    },
+    {
+        "label": "social",
+        "user_msg": (
+            f"Search for long-term rentals in Todos Santos, Baja California Sur "
+            f"under ${MAX_USD}/month in Facebook groups "
+            f"(\'Todos Santos Rentals\', \'Todos Santos Housing\', \'Baja Sur Rentals\') "
+            f"and any other community boards or social platforms you can find. "
+            f"Today is {TODAY}. Return the JSON array as instructed."
+        ),
+    },
+]
 
 CLAUDE_CLI_PATH = shutil.which("claude") or "/opt/homebrew/bin/claude"
 
@@ -345,14 +357,15 @@ def _parse_claude_output(raw: str, source: str) -> List[dict]:
     return clean
 
 
-def search_with_claude_cli() -> List[dict]:
+def search_with_claude_cli(user_msg: str, label: str = "") -> List[dict]:
     """Invoke the `claude` CLI via subprocess and return structured listings."""
     if not os.path.isfile(CLAUDE_CLI_PATH):
         print(f"  [claude-cli] binary not found at {CLAUDE_CLI_PATH}", file=sys.stderr)
         return []
 
-    print(f"  Calling claude CLI ({CLAUDE_CLI_PATH}) …")
-    prompt = f"{SYSTEM_PROMPT}\n\n{CLAUDE_USER_MSG}"
+    tag = f"claude-cli/{label}" if label else "claude-cli"
+    print(f"  Calling claude CLI — {label or 'general'} …")
+    prompt = f"{SYSTEM_PROMPT}\n\n{user_msg}"
     try:
         result = subprocess.run(
             [CLAUDE_CLI_PATH, "--print", prompt],
@@ -362,20 +375,20 @@ def search_with_claude_cli() -> List[dict]:
             env={**os.environ, "PATH": f"/opt/homebrew/bin:{os.environ.get('PATH', '')}"},
         )
     except FileNotFoundError:
-        print(f"  [claude-cli] could not execute {CLAUDE_CLI_PATH}", file=sys.stderr)
+        print(f"  [{tag}] could not execute {CLAUDE_CLI_PATH}", file=sys.stderr)
         return []
     except subprocess.TimeoutExpired:
-        print("  [claude-cli] timed out after 300 s", file=sys.stderr)
+        print(f"  [{tag}] timed out after 300 s", file=sys.stderr)
         return []
 
     if result.returncode != 0:
-        print(f"  [claude-cli] exit {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
+        print(f"  [{tag}] exit {result.returncode}: {result.stderr[:200]}", file=sys.stderr)
         return []
 
     return _parse_claude_output(result.stdout, "claude-cli")
 
 
-def search_with_claude_api() -> List[dict]:
+def search_with_claude_api(user_msg: str, label: str = "") -> List[dict]:
     """Use the Anthropic Python SDK with the web_search tool."""
     if anthropic is None:
         print("  [claude-api] anthropic package not installed. Run: pip install anthropic",
@@ -387,7 +400,8 @@ def search_with_claude_api() -> List[dict]:
         print("  [claude-api] ANTHROPIC_API_KEY not set.", file=sys.stderr)
         return []
 
-    print("  Calling Claude API with web_search …")
+    tag = f"claude-api/{label}" if label else "claude-api"
+    print(f"  Calling Claude API — {label or 'general'} …")
     client = anthropic.Anthropic(api_key=api_key)
     try:
         response = client.messages.create(
@@ -395,10 +409,10 @@ def search_with_claude_api() -> List[dict]:
             max_tokens=4096,
             system=SYSTEM_PROMPT,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": CLAUDE_USER_MSG}],
+            messages=[{"role": "user", "content": user_msg}],
         )
     except anthropic.APIError as e:
-        print(f"  [claude-api] error: {e}", file=sys.stderr)
+        print(f"  [{tag}] error: {e}", file=sys.stderr)
         return []
 
     raw = ""
@@ -938,28 +952,36 @@ def main():
     source_results["todossantos"] = scrape_todos_santos_cc()
 
     if not args.no_claude:
-        if args.cli:
-            print("Searching via claude CLI …")
-            source_results["claude-cli"] = search_with_claude_cli()
-        else:
-            # Auto-detect: prefer API when both the package and key are present;
-            # fall back to the CLI silently; warn only when neither is usable.
-            api_ready = anthropic is not None and bool(os.environ.get("ANTHROPIC_API_KEY"))
-            cli_ready = os.path.isfile(CLAUDE_CLI_PATH)
+        # Run each focused search task in sequence.
+        # Results accumulate under a single source key ("claude-cli" or
+        # "claude-api") so save/diff/dedup logic is unchanged.
+        api_ready = anthropic is not None and bool(os.environ.get("ANTHROPIC_API_KEY"))
+        cli_ready = os.path.isfile(CLAUDE_CLI_PATH)
 
-            if api_ready:
-                print("Searching via Claude API …")
-                source_results["claude-api"] = search_with_claude_api()
-            elif cli_ready:
-                print("Searching via claude CLI …")
-                source_results["claude-cli"] = search_with_claude_cli()
+        if not api_ready and not cli_ready:
+            print(
+                "  [claude] Skipping — neither API nor CLI is available.\n"
+                "  To enable:  pip install anthropic  and set ANTHROPIC_API_KEY\n"
+                "              OR  npm install -g @anthropic-ai/claude-code",
+                file=sys.stderr,
+            )
+        else:
+            if args.cli:
+                src_key = "claude-cli"
+                fn = search_with_claude_cli
+            elif api_ready:
+                src_key = "claude-api"
+                fn = search_with_claude_api
             else:
-                print(
-                    "  [claude] Skipping — neither API nor CLI is available.\n"
-                    "  To enable:  pip install anthropic  and set ANTHROPIC_API_KEY\n"
-                    "              OR  npm install -g @anthropic-ai/claude-code",
-                    file=sys.stderr,
-                )
+                src_key = "claude-cli"
+                fn = search_with_claude_cli
+
+            print(f"Searching via {src_key} ({len(CLAUDE_SEARCH_TASKS)} tasks) …")
+            combined: List[dict] = []
+            for task in CLAUDE_SEARCH_TASKS:
+                results = fn(user_msg=task["user_msg"], label=task["label"])
+                combined.extend(results)
+            source_results[src_key] = combined
 
     # Merge all sources for the combined report
     listings = merge_listings(list(source_results.values()))

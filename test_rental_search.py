@@ -361,36 +361,36 @@ class TestSearchWithClaudeCli(unittest.TestCase):
     @patch("rental_search.subprocess.run")
     def test_successful_call(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout=self._listing_json(), stderr="")
-        result = rs.search_with_claude_cli()
+        result = rs.search_with_claude_cli(user_msg="test query")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["source"], "claude-cli")
 
     @patch("rental_search.os.path.isfile", return_value=False)
     def test_binary_not_found(self, _):
-        self.assertEqual(rs.search_with_claude_cli(), [])
+        self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
     @patch("rental_search.os.path.isfile", return_value=True)
     @patch("rental_search.subprocess.run")
     def test_nonzero_exit_returns_empty(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="auth error")
-        self.assertEqual(rs.search_with_claude_cli(), [])
+        self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
     @patch("rental_search.os.path.isfile", return_value=True)
     @patch("rental_search.subprocess.run",
            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=120))
     def test_timeout_returns_empty(self, _run, _file):
-        self.assertEqual(rs.search_with_claude_cli(), [])
+        self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
     @patch("rental_search.os.path.isfile", return_value=True)
     @patch("rental_search.subprocess.run", side_effect=FileNotFoundError)
     def test_file_not_found_error(self, _run, _file):
-        self.assertEqual(rs.search_with_claude_cli(), [])
+        self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
     @patch("rental_search.os.path.isfile", return_value=True)
     @patch("rental_search.subprocess.run")
     def test_passes_print_flag(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
-        rs.search_with_claude_cli()
+        rs.search_with_claude_cli(user_msg="test query")
         args = mock_run.call_args[0][0]
         self.assertIn("--print", args)
 
@@ -398,7 +398,7 @@ class TestSearchWithClaudeCli(unittest.TestCase):
     @patch("rental_search.subprocess.run")
     def test_homebrew_on_path(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
-        rs.search_with_claude_cli()
+        rs.search_with_claude_cli(user_msg="test query")
         env = mock_run.call_args[1]["env"]
         self.assertIn("/opt/homebrew/bin", env["PATH"])
 
@@ -426,14 +426,14 @@ class TestSearchWithClaudeApi(unittest.TestCase):
         with patch("rental_search.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = mock_client
             mock_anthropic.APIError = Exception
-            result = rs.search_with_claude_api()
+            result = rs.search_with_claude_api(user_msg="test query")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["source"], "claude-api")
 
     def test_no_api_key_returns_empty(self):
         env = {k: v for k, v in __import__("os").environ.items() if k != "ANTHROPIC_API_KEY"}
         with patch.dict("os.environ", env, clear=True):
-            result = rs.search_with_claude_api()
+            result = rs.search_with_claude_api(user_msg="test query")
         self.assertEqual(result, [])
 
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test"})
@@ -443,12 +443,12 @@ class TestSearchWithClaudeApi(unittest.TestCase):
         with patch("rental_search.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = mock_client
             mock_anthropic.APIError = Exception
-            result = rs.search_with_claude_api()
+            result = rs.search_with_claude_api(user_msg="test query")
         self.assertEqual(result, [])
 
     def test_no_anthropic_package_returns_empty(self):
         with patch.object(rs, "anthropic", None):
-            result = rs.search_with_claude_api()
+            result = rs.search_with_claude_api(user_msg="test query")
         self.assertEqual(result, [])
 
 
