@@ -315,23 +315,21 @@ def _task(label: str, site: str, extra: str = "") -> dict:
     }
 
 CLAUDE_SEARCH_TASKS = [
-    _task("amyrex",    "https://amyrextodossantos.com/long-term-rentals",
+    _task("amyrex",     "https://amyrextodossantos.com/long-term-rentals",
           "Fetch ONLY this exact URL — do NOT follow links to the homepage or "
           "vacation-rentals pages. This page may show nightly rates; if so, "
           "multiply by 30 to estimate monthly cost and exclude if over "
           f"${MAX_USD}/month. Only include true monthly long-term rentals."),
     _task("bajaprops",  "https://bajaproperties.com/todos-santos",
           "Focus on rentals, not sales."),
-    _task("baraka",    "https://barakaentodos.com",
+    _task("baraka",     "https://barakaentodos.com",
           "Focus on long-term rentals, not short-term vacation rentals."),
-    _task("ricardoamigo", "https://ricardoamigo.com",
-          "Focus on rental listings, not property sales."),
-    _task("tsvilla",   "https://todossantosvillarentals.com",
-          "Focus on long-term rentals of 5+ months."),
-    _task("pescprop",  "https://pescaderopropertymgmt.com",
-          "Focus on rental listings for Todos Santos and El Pescadero area."),
-    _task("tsprop",    "https://todos-santos-property-management.com",
-          "Focus on rental listings, not property management services."),
+    _task("tsvilla-ts", "https://www.todossantosvillarentals.com/city/todos-santos/",
+          "List all rentals on this page. Focus on long-term, 5+ months."),
+    _task("tsvilla-pe", "https://www.todossantosvillarentals.com/city/el-pescadero/",
+          "List all rentals on this page. Focus on long-term, 5+ months."),
+    _task("pescprop",   "https://pescaderopropertymgmt.com/rentals",
+          "List all rental listings on this page for Todos Santos / El Pescadero area."),
 ]
 
 
