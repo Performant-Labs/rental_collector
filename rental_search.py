@@ -102,6 +102,8 @@ For each listing return a JSON object with these exact keys:
 
 Return ONLY a JSON array of listing objects — no prose, no markdown fences.
 Exclude anything clearly over ${MAX_USD}/month. If price is in MXN, convert at 17.5 MXN/USD.
+If a price is quoted per night (not per month), multiply by 30 to estimate monthly cost;
+if that estimate exceeds ${MAX_USD}/month, exclude it.
 If a listing has no price, include it with price_usd: null so the user can follow up.
 """
 
@@ -312,8 +314,9 @@ def _task(label: str, site: str, extra: str = "") -> dict:
 CLAUDE_SEARCH_TASKS = [
     _task("amyrex",    "https://amyrextodossantos.com/long-term-rentals",
           "Fetch ONLY this exact URL — do NOT follow links to the homepage or "
-          "vacation-rentals pages. Exclude any property with a nightly rate "
-          "(those are vacation rentals). Only include monthly long-term rentals."),
+          "vacation-rentals pages. This page may show nightly rates; if so, "
+          "multiply by 30 to estimate monthly cost and exclude if over "
+          f"${MAX_USD}/month. Only include true monthly long-term rentals."),
     _task("bajaprops", "https://bajaproperties.com/todos-santos",
           "Focus on rentals, not sales."),
     _task("baraka",    "https://barakaentodos.com",
