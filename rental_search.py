@@ -366,7 +366,7 @@ def search_with_claude_cli(user_msg: str, label: str = "") -> List[dict]:
     prompt = f"{SYSTEM_PROMPT}\n\n{user_msg}"
     try:
         result = subprocess.run(
-            [CLAUDE_CLI_PATH, "--print", prompt],
+            [CLAUDE_CLI_PATH, "--print", "--dangerously-skip-permissions", prompt],
             capture_output=True,
             text=True,
             timeout=120,
