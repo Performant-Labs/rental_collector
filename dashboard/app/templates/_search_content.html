@@ -1,9 +1,9 @@
 {% if search.error_message %}
-  <div class="alert alert-error">{{ search.error_message }}{% if search.request_id %} (request: {{ search.request_id }}){% endif %}</div>
+  <div class="alert alert-error" role="alert">{{ search.error_message }}{% if search.request_id %} (request: {{ search.request_id }}){% endif %}</div>
 {% endif %}
 
 {% if search.validation_issues %}
-  <div class="alert alert-warn">Some query parameters were adjusted for safety.</div>
+  <div class="alert alert-warn" role="status" aria-live="polite">Some query parameters were adjusted for safety.</div>
 {% endif %}
 
 <div class="layout">

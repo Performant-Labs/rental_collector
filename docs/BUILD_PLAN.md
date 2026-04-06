@@ -157,8 +157,8 @@ All phases in this checklist should follow:
 - [x] Add validation and sanitization for user query params
 - [x] Add graceful error UI states for search backend outages
 - [x] Add logging and request IDs for debugging
-- [ ] Complete final performance and accessibility pass
-- [ ] Verify production-ready first release candidate
+- [x] Complete final performance and accessibility pass
+- [x] Verify production-ready first release candidate
 
 ### Unit tests (required before release)
 - [x] `test_invalid_filter_values_are_rejected_or_ignored_safely`

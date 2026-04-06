@@ -79,5 +79,11 @@ def test_release_candidate_core_user_flow(monkeypatch):
     assert home.status_code == 200
     assert partial.status_code == 200
     assert 'hx-push-url="true"' in home.text
+    assert 'hx-indicator="#search-loading"' in home.text
+    assert 'role="status"' in home.text
+    assert 'aria-live="polite"' in home.text
+    assert 'for="q"' in home.text
+    assert 'for="sort"' in home.text
     assert "Casa Luna" in partial.text
     assert 'href="/rentals/airbnb-01-casa-luna/listing.html"' in partial.text
+    assert 'rel="noopener noreferrer"' in partial.text
