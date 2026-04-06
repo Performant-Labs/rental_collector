@@ -2,6 +2,20 @@
 
 This checklist implements a containerized dashboard stack with `FastAPI + HTMX + Meilisearch`, while keeping scraping independent.
 
+## AI Guidance Rules Applied
+
+All phases in this checklist should follow:
+
+- `docs/ai_guidance/search/MEILISEARCH_GUIDE.md`
+- `docs/ai_guidance/data/INGESTION_PIPELINE_RULES.md`
+- `docs/ai_guidance/frontend/HTMX_PATTERNS.md`
+- `docs/ai_guidance/devops/DOCKER_COMPOSE_WORKFLOW.md`
+- `docs/ai_guidance/python/PYTEST_BACKEND_TESTING.md`
+- `docs/ai_guidance/NAMING.md`
+- `docs/ai_guidance/technical_writing/documentation_guidance.md`
+
+---
+
 ## Phase 1 — Project skeleton and local app boot
 
 - [x] Create `dashboard/app/main.py`

@@ -4,6 +4,24 @@ A local database of long-term rentals in Todos Santos, Baja California Sur, Mexi
 
 ---
 
+## AI Guidance References
+
+When implementing dashboard/search work, follow these guidance docs in `docs/ai_guidance/`:
+
+- `docs/ai_guidance/search/MEILISEARCH_GUIDE.md`
+- `docs/ai_guidance/data/INGESTION_PIPELINE_RULES.md`
+- `docs/ai_guidance/frontend/HTMX_PATTERNS.md`
+- `docs/ai_guidance/devops/DOCKER_COMPOSE_WORKFLOW.md`
+- `docs/ai_guidance/python/PYTEST_BACKEND_TESTING.md`
+
+General subtree and repository-wide guidance:
+
+- `docs/ai_guidance/README.md`
+- `docs/ai_guidance/NAMING.md`
+- `docs/ai_guidance/technical_writing/documentation_guidance.md`
+
+---
+
 ## Typical workflow
 
 **Weekly search for new listings:**
