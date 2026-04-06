@@ -175,7 +175,7 @@ All phases in this checklist should follow:
 
 ## Definition of Done
 
-- [ ] All phase unit tests pass before moving to next phase
-- [ ] Dashboard is deployable in container
-- [ ] Ingestion works both on launch (optional bootstrap) and via cron
-- [ ] Search supports text relevance, multi-facet filtering, sorting, and pagination
+- [x] All phase unit tests pass before moving to next phase
+- [x] Dashboard is deployable in container
+- [x] Ingestion works both on launch (optional bootstrap) and via cron
+- [x] Search supports text relevance, multi-facet filtering, sorting, and pagination
