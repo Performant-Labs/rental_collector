@@ -7,6 +7,7 @@ from fastapi.templating import Jinja2Templates
 
 from dashboard.app.indexing_commands import bootstrap_ingest_if_enabled
 from dashboard.app.meilisearch_index_client import MeilisearchIndexClient
+from dashboard.app.search_service import FACET_FIELDS, perform_search
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -43,4 +44,31 @@ def home(request: Request):
         request=request,
         name="index.html",
         context={"title": "Todos Santos Rentals Dashboard"},
+    )
+
+
+def _parse_facet_filters(request: Request) -> dict[str, list[str]]:
+    facet_filters: dict[str, list[str]] = {}
+    for field in FACET_FIELDS:
+        facet_filters[field] = request.query_params.getlist(field)
+    return facet_filters
+
+
+@app.get("/api/search")
+def search_endpoint(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    client = MeilisearchIndexClient.from_env()
+    facet_filters = _parse_facet_filters(request)
+    return perform_search(
+        client=client,
+        query=q,
+        facet_filters=facet_filters,
+        sort_option=sort,
+        page=page,
+        per_page=per_page,
     )

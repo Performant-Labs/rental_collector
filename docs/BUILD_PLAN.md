@@ -79,21 +79,26 @@ All phases in this checklist should follow:
 
 ## Phase 4 — Search and facets API contract
 
-- [ ] Implement backend search service mapping request params to Meilisearch query
-- [ ] Support text query (`q`)
-- [ ] Support multi-select facets
-- [ ] Support sort options (`price asc/desc`, `recent`)
-- [ ] Support pagination
-- [ ] Return results and facet distributions in a stable response shape
-- [ ] Expose endpoint(s) suitable for HTMX partial rendering
-- [ ] Ensure consistent query parsing and filter expression building
+- [x] Implement backend search service mapping request params to Meilisearch query
+- [x] Support text query (`q`)
+- [x] Support multi-select facets
+- [x] Support sort options (`price asc/desc`, `recent`)
+- [x] Support pagination
+- [x] Return results and facet distributions in a stable response shape
+- [x] Expose endpoint(s) suitable for HTMX partial rendering
+- [x] Ensure consistent query parsing and filter expression building
 
 ### Unit tests (required before Phase 5)
-- [ ] `test_empty_query_returns_first_page`
-- [ ] `test_text_query_passed_to_search_engine`
-- [ ] `test_multiple_facets_build_correct_filter_expression`
-- [ ] `test_sort_option_maps_to_search_sort`
-- [ ] `test_pagination_offsets_are_correct`
+- [x] `test_empty_query_returns_first_page`
+- [x] `test_text_query_passed_to_search_engine`
+- [x] `test_multiple_facets_build_correct_filter_expression`
+- [x] `test_sort_option_maps_to_search_sort`
+- [x] `test_pagination_offsets_are_correct`
+
+### Integration tests (start in Phase 4)
+- [ ] `test_api_search_endpoint_returns_expected_contract`
+- [ ] `test_api_search_endpoint_with_facets_and_sort`
+- [ ] `test_api_search_endpoint_pagination_contract`
 
 ---
 
@@ -118,6 +123,11 @@ All phases in this checklist should follow:
 - [ ] `test_empty_state_message_renders`
 - [ ] `test_listing_card_link_points_to_local_listing_html`
 
+### Integration tests (required before Phase 6)
+- [ ] `test_htmx_results_partial_updates_from_search`
+- [ ] `test_htmx_facet_selection_updates_results_and_counts`
+- [ ] `test_htmx_url_state_roundtrip_for_search_and_filters`
+
 ---
 
 ## Phase 6 — Scheduling, operations, and container orchestration
@@ -135,6 +145,11 @@ All phases in this checklist should follow:
 - [ ] `test_ingest_returns_nonzero_on_fatal_failure`
 - [ ] `test_cli_flags_parse_expected_modes`
 
+### Integration tests (required before completion)
+- [ ] `test_end_to_end_scrape_artifact_to_search_index_flow`
+- [ ] `test_cron_ingest_updates_search_without_app_restart`
+- [ ] `test_full_reindex_restores_search_after_index_clear`
+
 ---
 
 ## Phase 7 — Quality hardening and release readiness
@@ -150,6 +165,11 @@ All phases in this checklist should follow:
 - [ ] `test_search_backend_timeout_returns_safe_error_state`
 - [ ] `test_unexpected_search_error_is_handled_without_500_template_crash`
 - [ ] `test_query_param_validation_rules`
+
+### Integration tests (required before release)
+- [ ] `test_search_error_ui_and_api_fallback_behavior`
+- [ ] `test_container_smoke_dashboard_and_meilisearch_health`
+- [ ] `test_release_candidate_core_user_flow`
 
 ---
 

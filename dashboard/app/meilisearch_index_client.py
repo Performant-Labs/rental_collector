@@ -10,9 +10,9 @@ import httpx
 class HttpTransport(Protocol):
     def get(self, url: str, headers: dict[str, str], timeout: int) -> Any: ...
 
-    def post(self, url: str, headers: dict[str, str], json: dict[str, Any], timeout: int) -> Any: ...
+    def post(self, url: str, headers: dict[str, str], json: Any, timeout: int) -> Any: ...
 
-    def patch(self, url: str, headers: dict[str, str], json: dict[str, Any], timeout: int) -> Any: ...
+    def patch(self, url: str, headers: dict[str, str], json: Any, timeout: int) -> Any: ...
 
     def delete(self, url: str, headers: dict[str, str], timeout: int) -> Any: ...
 
@@ -24,10 +24,10 @@ class HttpxTransport:
     def get(self, url: str, headers: dict[str, str], timeout: int) -> Any:
         return self._client.get(url, headers=headers, timeout=timeout)
 
-    def post(self, url: str, headers: dict[str, str], json: dict[str, Any], timeout: int) -> Any:
+    def post(self, url: str, headers: dict[str, str], json: Any, timeout: int) -> Any:
         return self._client.post(url, headers=headers, json=json, timeout=timeout)
 
-    def patch(self, url: str, headers: dict[str, str], json: dict[str, Any], timeout: int) -> Any:
+    def patch(self, url: str, headers: dict[str, str], json: Any, timeout: int) -> Any:
         return self._client.patch(url, headers=headers, json=json, timeout=timeout)
 
     def delete(self, url: str, headers: dict[str, str], timeout: int) -> Any:
@@ -122,3 +122,34 @@ class MeilisearchIndexClient:
             raise RuntimeError(f"Failed to upsert documents: {response.status_code} {response.text}")
         payload = response.json() if hasattr(response, "json") else {}
         return payload.get("taskUid")
+
+    def search_documents(
+        self,
+        query: str,
+        *,
+        filter_expression: str | None = None,
+        sort: list[str] | None = None,
+        offset: int = 0,
+        limit: int = 20,
+        facets: list[str] | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "q": query,
+            "offset": offset,
+            "limit": limit,
+            "facets": facets or [],
+        }
+        if filter_expression:
+            payload["filter"] = filter_expression
+        if sort:
+            payload["sort"] = sort
+
+        response = self._transport.post(
+            f"{self._index_url()}/search",
+            headers=self._headers(),
+            json=payload,
+            timeout=self.timeout_seconds,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(f"Failed to search index: {response.status_code} {response.text}")
+        return response.json() if hasattr(response, "json") else {}
