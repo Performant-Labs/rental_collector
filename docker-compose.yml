@@ -1,0 +1,25 @@
+services:
+  dashboard-api:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    working_dir: /app
+    command: uvicorn dashboard.app.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/app
+    environment:
+      PYTHONUNBUFFERED: "1"
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili_data:/meili_data
+
+volumes:
+  meili_data:

@@ -4,20 +4,20 @@ This checklist implements a containerized dashboard stack with `FastAPI + HTMX +
 
 ## Phase 1 — Project skeleton and local app boot
 
-- [ ] Create `dashboard/app/main.py`
-- [ ] Create `dashboard/app/templates/`
-- [ ] Create `dashboard/app/static/`
-- [ ] Create `dashboard/tests/`
-- [ ] Add minimal FastAPI app with health endpoint and home route
-- [ ] Add Dockerfile for dashboard API container
-- [ ] Add dependency file (`requirements.txt` or `pyproject.toml`)
-- [ ] Verify API starts in container and returns a basic page
-- [ ] Verify `GET /health` returns healthy status
+- [x] Create `dashboard/app/main.py`
+- [x] Create `dashboard/app/templates/`
+- [x] Create `dashboard/app/static/`
+- [x] Create `dashboard/tests/`
+- [x] Add minimal FastAPI app with health endpoint and home route
+- [x] Add Dockerfile for dashboard API container
+- [x] Add dependency file (`requirements.txt` or `pyproject.toml`)
+- [x] Verify API starts in container and returns a basic page
+- [x] Verify `GET /health` returns healthy status
 
 ### Unit tests (required before Phase 2)
-- [ ] `test_health_endpoint_returns_200`
-- [ ] `test_home_route_returns_200`
-- [ ] `test_home_uses_template_response`
+- [x] `test_health_endpoint_returns_200`
+- [x] `test_home_route_returns_200`
+- [x] `test_home_uses_template_response`
 
 ---
 

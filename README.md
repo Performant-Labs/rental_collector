@@ -60,6 +60,25 @@ If not found, install it:
 npm install -g @anthropic-ai/claude-code
 ```
 
+### 4. Dashboard dev (containerized)
+
+```bash
+# Start dashboard API + Meilisearch
+docker compose up -d dashboard-api meilisearch
+
+# Open dashboard
+open http://localhost:8000
+
+# Health check
+curl http://localhost:8000/health
+```
+
+Run Phase 1 dashboard tests in the container:
+
+```bash
+docker compose run --rm dashboard-api python -m pytest dashboard/tests/test_phase1_app.py -v
+```
+
 ---
 
 ## Scripts
@@ -168,6 +187,10 @@ MXN prices are converted to USD at **17.5 MXN/USD**. Listings over $2,000/month 
 
 ```bash
 python3 -m pytest scraper/test_rental_search.py -v
+```
+
+```bash
+docker compose run --rm dashboard-api python -m pytest dashboard/tests/test_phase1_app.py -v
 ```
 
 All network calls and subprocess calls are mocked — tests run offline with no API key required.
