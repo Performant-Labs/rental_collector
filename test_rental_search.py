@@ -149,7 +149,7 @@ class TestScrapeAirbnbLocal(unittest.TestCase):
         self.assertEqual(result, [])
 
     def test_filters_over_max(self):
-        self._write_folder("airbnb-01-expensive", {"title": "Expensive", "usdPerMonth": 2000})
+        self._write_folder("airbnb-01-expensive", {"title": "Expensive", "usdPerMonth": 2100})
         result = rs.scrape_airbnb_local()
         self.assertEqual(result, [])
 
@@ -314,7 +314,7 @@ class TestParseClaudeOutput(unittest.TestCase):
         self.assertEqual(len(rs._parse_claude_output(raw, "claude-api")), 1)
 
     def test_filters_over_max(self):
-        listings = [self._raw_listing("Cheap", 900), self._raw_listing("Over", 2000)]
+        listings = [self._raw_listing("Cheap", 900), self._raw_listing("Over", 2100)]
         result = rs._parse_claude_output(json.dumps(listings), "claude-api")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["title"], "Cheap")
@@ -502,7 +502,7 @@ class TestScrapeCreaigslist(unittest.TestCase):
     @patch("rental_search.get_soup")
     def test_filters_over_max(self, mock_soup):
         from bs4 import BeautifulSoup
-        mock_soup.return_value = BeautifulSoup(self._make_html(price="$2,000"), "html.parser")
+        mock_soup.return_value = BeautifulSoup(self._make_html(price="$2,100"), "html.parser")
         self.assertEqual(rs.scrape_craigslist(), [])
 
     @patch("rental_search.get_soup", return_value=None)
@@ -565,7 +565,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
     def test_filters_over_max_price(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(
-            self._make_html(content="Rental house $2000/month"), "html.parser"
+            self._make_html(content="Rental house $2100/month"), "html.parser"
         )
         self.assertEqual(rs.scrape_todos_santos_cc(), [])
 
