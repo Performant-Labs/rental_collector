@@ -57,23 +57,23 @@ All phases in this checklist should follow:
 
 ## Phase 3 — Meilisearch integration and indexing jobs
 
-- [ ] Add Meilisearch client wrapper
-- [ ] Configure searchable attributes
-- [ ] Configure filterable attributes (facets)
-- [ ] Configure sortable attributes
-- [ ] Implement `full_reindex` command
-- [ ] Implement `incremental_upsert` command
-- [ ] Add optional startup bootstrap mode
-- [ ] Add standalone ingest command for cron
-- [ ] Verify documents are indexed into Meilisearch
-- [ ] Verify faceting and sorting are configured and queryable
+- [x] Add Meilisearch client wrapper
+- [x] Configure searchable attributes
+- [x] Configure filterable attributes (facets)
+- [x] Configure sortable attributes
+- [x] Implement `full_reindex` command
+- [x] Implement `incremental_upsert` command
+- [x] Add optional startup bootstrap mode
+- [x] Add standalone ingest command for cron
+- [x] Verify documents are indexed into Meilisearch
+- [x] Verify faceting and sorting are configured and queryable
 
 ### Unit tests (required before Phase 4)
-- [ ] `test_creates_index_if_missing`
-- [ ] `test_applies_index_settings`
-- [ ] `test_upsert_sends_expected_documents`
-- [ ] `test_full_reindex_clears_then_reloads`
-- [ ] `test_incremental_upsert_is_idempotent`
+- [x] `test_creates_index_if_missing`
+- [x] `test_applies_index_settings`
+- [x] `test_upsert_sends_expected_documents`
+- [x] `test_full_reindex_clears_then_reloads`
+- [x] `test_incremental_upsert_is_idempotent`
 
 ---
 
