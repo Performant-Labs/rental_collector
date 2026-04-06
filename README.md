@@ -1,6 +1,6 @@
 # Todos Santos Rentals
 
-A local database of long-term rentals in Todos Santos, Baja California Sur, Mexico — under $1,500/month. Listings are scraped from multiple sources, normalized to a common format, and saved as browsable HTML cards alongside structured JSON for analysis.
+A local database of long-term rentals in Todos Santos, Baja California Sur, Mexico — under $2,000/month. Listings are scraped from multiple sources, normalized to a common format, and saved as browsable HTML cards alongside structured JSON for analysis.
 
 ---
 
@@ -158,7 +158,7 @@ Every `info.json` — across all sources — uses the same fields:
 | `scraped` | string | ISO date the listing was collected (`YYYY-MM-DD`) |
 | `localPhotos` | array | Filenames of downloaded photos, e.g. `["photo_01.jpg"]` |
 
-MXN prices are converted to USD at **17.5 MXN/USD**. Listings over $1,500/month are excluded automatically.
+MXN prices are converted to USD at **17.5 MXN/USD**. Listings over $2,000/month are excluded automatically.
 
 ---
 

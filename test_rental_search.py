@@ -200,7 +200,7 @@ class TestParsePriceUsd(unittest.TestCase):
         self.assertEqual(rs._parse_price_usd("$1,400"), 1400)
 
     def test_boundary_at_max(self):
-        self.assertEqual(rs._parse_price_usd("$1500"), 1500)
+        self.assertEqual(rs._parse_price_usd("$2000"), 2000)
 
     def test_three_digit_dollar(self):
         self.assertEqual(rs._parse_price_usd("$800/mo"), 800)

@@ -3,7 +3,7 @@
 Todos Santos Rental Search
 ===========================
 Scrapes known sources + uses Claude (with web_search) to find long-term
-rentals in Todos Santos under $1,500 USD/month.
+rentals in Todos Santos under $2,000 USD/month.
 
 Usage:
     python3 rental_search.py              # print report (uses Claude API)
@@ -76,7 +76,7 @@ except ImportError:
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-MAX_USD   = 1500
+MAX_USD   = 2000
 MIN_MONTHS = 5      # minimum rental term we're interested in
 RESULTS_DIR = Path(__file__).parent / "rentals"
 TODAY = date.today().isoformat()
@@ -633,8 +633,9 @@ def _next_index(source: str) -> int:
     return (max(indices) + 1) if indices else 1
 
 
-def _esc(text: str) -> str:
+def _esc(text) -> str:
     """Minimal HTML escaping for text interpolated into HTML."""
+    text = str(text)
     return (
         text.replace("&", "&amp;")
             .replace("<", "&lt;")
