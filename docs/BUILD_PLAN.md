@@ -37,21 +37,21 @@ All phases in this checklist should follow:
 
 ## Phase 2 — Listing document model and ingestion pipeline
 
-- [ ] Define normalized dashboard document schema from `rentals/*/info.json` and folder metadata
-- [ ] Build ingestion module to discover listing folders
-- [ ] Build ingestion module to parse `info.json`
-- [ ] Build ingestion module to generate stable `id`
-- [ ] Build ingestion module to normalize fields for faceting and sort
-- [ ] Add idempotent upsert behavior (same input -> same document id and values)
-- [ ] Verify ingestion function returns validated documents
-- [ ] Verify invalid listings are skipped with structured warnings
+- [x] Define normalized dashboard document schema from `rentals/*/info.json` and folder metadata
+- [x] Build ingestion module to discover listing folders
+- [x] Build ingestion module to parse `info.json`
+- [x] Build ingestion module to generate stable `id`
+- [x] Build ingestion module to normalize fields for faceting and sort
+- [x] Add idempotent upsert behavior (same input -> same document id and values)
+- [x] Verify ingestion function returns validated documents
+- [x] Verify invalid listings are skipped with structured warnings
 
 ### Unit tests (required before Phase 3)
-- [ ] `test_discovers_listing_folders`
-- [ ] `test_parses_info_json_to_document`
-- [ ] `test_generates_stable_document_id`
-- [ ] `test_skips_invalid_listing_without_crashing`
-- [ ] `test_price_bucket_computation`
+- [x] `test_discovers_listing_folders`
+- [x] `test_parses_info_json_to_document`
+- [x] `test_generates_stable_document_id`
+- [x] `test_skips_invalid_listing_without_crashing`
+- [x] `test_price_bucket_computation`
 
 ---
 
