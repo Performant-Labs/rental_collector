@@ -1,3 +1,11 @@
+{% if search.error_message %}
+  <div class="alert alert-error">{{ search.error_message }}{% if search.request_id %} (request: {{ search.request_id }}){% endif %}</div>
+{% endif %}
+
+{% if search.validation_issues %}
+  <div class="alert alert-warn">Some query parameters were adjusted for safety.</div>
+{% endif %}
+
 <div class="layout">
   <div class="panel" id="facets-panel">
     {% include "_facets.html" %}

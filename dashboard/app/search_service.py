@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from math import ceil
 from typing import Any
 
@@ -21,9 +22,49 @@ _SORT_MAP: dict[str, list[str] | None] = {
     "recent": ["scraped:desc"],
 }
 
+MAX_QUERY_LENGTH = 120
+
 
 def _escape_filter_value(value: str) -> str:
     return value.replace('"', '\\"')
+
+
+def sanitize_query(query: str) -> str:
+    cleaned = re.sub(r"\s+", " ", (query or "").strip())
+    return cleaned[:MAX_QUERY_LENGTH]
+
+
+def sanitize_facet_filters(
+    facet_filters: dict[str, list[str]],
+) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    safe_filters: dict[str, list[str]] = {}
+    rejected: dict[str, list[str]] = {}
+
+    for field in FACET_FIELDS:
+        values = facet_filters.get(field, [])
+        cleaned_values = [value.strip() for value in values if value and value.strip()]
+        accepted: list[str] = []
+        rejected_values: list[str] = []
+
+        for value in cleaned_values:
+            if field in {"has_photos", "has_contact"}:
+                lowered = value.lower()
+                if lowered in {"true", "1", "yes", "on", "false", "0", "no", "off"}:
+                    accepted.append(value)
+                else:
+                    rejected_values.append(value)
+                continue
+
+            if len(value) > 80:
+                rejected_values.append(value)
+                continue
+            accepted.append(value)
+
+        safe_filters[field] = accepted
+        if rejected_values:
+            rejected[field] = rejected_values
+
+    return safe_filters, rejected
 
 
 def _normalise_filter_value(field: str, value: str) -> str:
@@ -71,15 +112,17 @@ def perform_search(
     page: int,
     per_page: int,
 ) -> dict[str, Any]:
+    safe_query = sanitize_query(query)
+    safe_filters, rejected_filters = sanitize_facet_filters(facet_filters)
     safe_page = max(1, page)
     safe_per_page = max(1, min(per_page, 100))
     offset = (safe_page - 1) * safe_per_page
 
-    filter_expression = build_filter_expression(facet_filters)
+    filter_expression = build_filter_expression(safe_filters)
     sort = map_sort_option(sort_option)
 
     payload = client.search_documents(
-        query=query,
+        query=safe_query,
         filter_expression=filter_expression,
         sort=sort,
         offset=offset,
@@ -95,7 +138,7 @@ def perform_search(
     total_pages = ceil(total_hits / safe_per_page) if total_hits else 0
 
     return {
-        "query": query,
+        "query": safe_query,
         "results": hits,
         "total_hits": total_hits,
         "page": safe_page,
@@ -103,5 +146,6 @@ def perform_search(
         "total_pages": total_pages,
         "sort": sort_option,
         "facets": payload.get("facetDistribution", {}),
-        "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
+        "selected_filters": {field: safe_filters.get(field, []) for field in FACET_FIELDS},
+        "rejected_filters": rejected_filters,
     }

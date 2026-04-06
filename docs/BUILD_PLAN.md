@@ -154,22 +154,22 @@ All phases in this checklist should follow:
 
 ## Phase 7 — Quality hardening and release readiness
 
-- [ ] Add validation and sanitization for user query params
-- [ ] Add graceful error UI states for search backend outages
-- [ ] Add logging and request IDs for debugging
+- [x] Add validation and sanitization for user query params
+- [x] Add graceful error UI states for search backend outages
+- [x] Add logging and request IDs for debugging
 - [ ] Complete final performance and accessibility pass
 - [ ] Verify production-ready first release candidate
 
 ### Unit tests (required before release)
-- [ ] `test_invalid_filter_values_are_rejected_or_ignored_safely`
-- [ ] `test_search_backend_timeout_returns_safe_error_state`
-- [ ] `test_unexpected_search_error_is_handled_without_500_template_crash`
-- [ ] `test_query_param_validation_rules`
+- [x] `test_invalid_filter_values_are_rejected_or_ignored_safely`
+- [x] `test_search_backend_timeout_returns_safe_error_state`
+- [x] `test_unexpected_search_error_is_handled_without_500_template_crash`
+- [x] `test_query_param_validation_rules`
 
 ### Integration tests (required before release)
-- [ ] `test_search_error_ui_and_api_fallback_behavior`
-- [ ] `test_container_smoke_dashboard_and_meilisearch_health`
-- [ ] `test_release_candidate_core_user_flow`
+- [x] `test_search_error_ui_and_api_fallback_behavior`
+- [x] `test_container_smoke_dashboard_and_meilisearch_health`
+- [x] `test_release_candidate_core_user_flow`
 
 ---
 

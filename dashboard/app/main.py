@@ -1,5 +1,7 @@
 import os
+import uuid
 from pathlib import Path
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -11,8 +13,23 @@ from dashboard.app.search_service import FACET_FIELDS, perform_search
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+logger = logging.getLogger("dashboard.app")
+
+ALLOWED_SORT_OPTIONS = {"relevance", "price_asc", "price_desc", "recent"}
+MAX_PER_PAGE = 100
+MIN_PER_PAGE = 1
 
 app = FastAPI(title="Todos Santos Rentals Dashboard")
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    logger.info("request_complete path=%s method=%s request_id=%s", request.url.path, request.method, request_id)
+    return response
 
 
 def _bootstrap_enabled() -> bool:
@@ -129,6 +146,62 @@ def _parse_facet_filters(request: Request) -> dict[str, list[str]]:
     return facet_filters
 
 
+def _validate_query_params(
+    *,
+    q: str,
+    sort: str,
+    page: int,
+    per_page: int,
+) -> tuple[str, str, int, int, dict[str, str]]:
+    issues: dict[str, str] = {}
+    safe_q = q
+
+    safe_sort = sort
+    if safe_sort not in ALLOWED_SORT_OPTIONS:
+        issues["sort"] = "invalid_sort"
+        safe_sort = "relevance"
+
+    safe_page = page
+    if safe_page < 1:
+        issues["page"] = "out_of_range"
+        safe_page = 1
+
+    safe_per_page = per_page
+    if safe_per_page < MIN_PER_PAGE or safe_per_page > MAX_PER_PAGE:
+        issues["per_page"] = "out_of_range"
+        safe_per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
+
+    return safe_q, safe_sort, safe_page, safe_per_page, issues
+
+
+def _fallback_search_payload(
+    *,
+    request: Request,
+    query: str,
+    sort: str,
+    page: int,
+    per_page: int,
+    facet_filters: dict[str, list[str]],
+    validation_issues: dict[str, str],
+    error_message: str,
+) -> dict[str, object]:
+    return {
+        "query": query,
+        "results": [],
+        "total_hits": 0,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": 0,
+        "sort": sort,
+        "facets": {},
+        "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
+        "rejected_filters": {},
+        "validation_issues": validation_issues,
+        "error_message": error_message,
+        "request_id": getattr(request.state, "request_id", ""),
+    }
+
+
 def _run_search(
     request: Request,
     *,
@@ -137,31 +210,51 @@ def _run_search(
     page: int,
     per_page: int,
 ):
+    safe_q, safe_sort, safe_page, safe_per_page, validation_issues = _validate_query_params(
+        q=q,
+        sort=sort,
+        page=page,
+        per_page=per_page,
+    )
     facet_filters = _parse_facet_filters(request)
     client = MeilisearchIndexClient.from_env()
     try:
-        return perform_search(
+        result = perform_search(
             client=client,
-            query=q,
+            query=safe_q,
             facet_filters=facet_filters,
-            sort_option=sort,
-            page=page,
-            per_page=per_page,
+            sort_option=safe_sort,
+            page=safe_page,
+            per_page=safe_per_page,
+        )
+        result["validation_issues"] = validation_issues
+        result["error_message"] = ""
+        result["request_id"] = getattr(request.state, "request_id", "")
+        return result
+    except TimeoutError:
+        logger.warning("search_timeout request_id=%s", getattr(request.state, "request_id", ""))
+        return _fallback_search_payload(
+            request=request,
+            query=safe_q,
+            sort=safe_sort,
+            page=safe_page,
+            per_page=safe_per_page,
+            facet_filters=facet_filters,
+            validation_issues=validation_issues,
+            error_message="Search temporarily unavailable. Please retry.",
         )
     except Exception:
-        safe_page = max(1, page)
-        safe_per_page = max(1, min(per_page, 100))
-        return {
-            "query": q,
-            "results": [],
-            "total_hits": 0,
-            "page": safe_page,
-            "per_page": safe_per_page,
-            "total_pages": 0,
-            "sort": sort,
-            "facets": {},
-            "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
-        }
+        logger.exception("search_unexpected_error request_id=%s", getattr(request.state, "request_id", ""))
+        return _fallback_search_payload(
+            request=request,
+            query=safe_q,
+            sort=safe_sort,
+            page=safe_page,
+            per_page=safe_per_page,
+            facet_filters=facet_filters,
+            validation_issues=validation_issues,
+            error_message="Search backend unavailable. Showing safe fallback state.",
+        )
 
 
 @app.get("/api/search")
