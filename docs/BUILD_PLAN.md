@@ -132,23 +132,23 @@ All phases in this checklist should follow:
 
 ## Phase 6 — Scheduling, operations, and container orchestration
 
-- [ ] Add `docker-compose` service for `dashboard-api`
-- [ ] Add `docker-compose` service for `meilisearch`
-- [ ] Add cron-compatible ingestion command (called after nightly scrape)
-- [ ] Add simple locking strategy to prevent overlapping ingestion jobs
-- [ ] Add operational docs for startup, reindex, and backup/restore of search data
-- [ ] Verify end-to-end flow: scraper writes files -> cron runs ingestion -> dashboard reflects new data
+- [x] Add `docker-compose` service for `dashboard-api`
+- [x] Add `docker-compose` service for `meilisearch`
+- [x] Add cron-compatible ingestion command (called after nightly scrape)
+- [x] Add simple locking strategy to prevent overlapping ingestion jobs
+- [x] Add operational docs for startup, reindex, and backup/restore of search data
+- [x] Verify end-to-end flow: scraper writes files -> cron runs ingestion -> dashboard reflects new data
 
 ### Unit tests (required before completion)
-- [ ] `test_ingest_command_invokes_incremental_upsert`
-- [ ] `test_lock_prevents_concurrent_ingest_runs`
-- [ ] `test_ingest_returns_nonzero_on_fatal_failure`
-- [ ] `test_cli_flags_parse_expected_modes`
+- [x] `test_ingest_command_invokes_incremental_upsert`
+- [x] `test_lock_prevents_concurrent_ingest_runs`
+- [x] `test_ingest_returns_nonzero_on_fatal_failure`
+- [x] `test_cli_flags_parse_expected_modes`
 
 ### Integration tests (required before completion)
-- [ ] `test_end_to_end_scrape_artifact_to_search_index_flow`
-- [ ] `test_cron_ingest_updates_search_without_app_restart`
-- [ ] `test_full_reindex_restores_search_after_index_clear`
+- [x] `test_end_to_end_scrape_artifact_to_search_index_flow`
+- [x] `test_cron_ingest_updates_search_without_app_restart`
+- [x] `test_full_reindex_restores_search_after_index_clear`
 
 ---
 
