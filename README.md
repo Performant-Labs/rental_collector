@@ -8,7 +8,7 @@ A local database of long-term rentals in Todos Santos, Baja California Sur, Mexi
 
 **Weekly search for new listings:**
 ```bash
-python3 rental_search.py --diff   # search, save, and show what's new
+python3 scraper/rental_search.py --diff   # search, save, and show what's new
 ```
 
 **Browse a listing:**
@@ -16,7 +16,7 @@ Open any `rentals/{source}-*/listing.html` in a browser.
 
 **After adding a new Airbnb listing manually:**
 ```bash
-python3 download_photos.py        # pull photos from CDN, rewrite listing.html
+python3 scraper/download_photos.py        # pull photos from CDN, rewrite listing.html
 ```
 
 **Analyze listings across sources:**
@@ -64,26 +64,26 @@ npm install -g @anthropic-ai/claude-code
 
 ## Scripts
 
-### `rental_search.py` — find and save listings
+### `scraper/rental_search.py` — find and save listings
 
 ```bash
 # Print a combined report (uses Claude API + web search)
-python3 rental_search.py
+python3 scraper/rental_search.py
 
 # Use the local claude CLI instead of the Python SDK
-python3 rental_search.py --cli
+python3 scraper/rental_search.py --cli
 
 # Scrape only — no Claude call, no API key needed
-python3 rental_search.py --no-claude
+python3 scraper/rental_search.py --no-claude
 
 # Save per-source JSON files + listing folders
-python3 rental_search.py --save
+python3 scraper/rental_search.py --save
 
 # Save + show what's new or removed vs. the previous run
-python3 rental_search.py --diff
+python3 scraper/rental_search.py --diff
 ```
 
-Flags can be combined: `python3 rental_search.py --cli --diff`
+Flags can be combined: `python3 scraper/rental_search.py --cli --diff`
 
 **Sources searched:**
 
@@ -98,12 +98,12 @@ Flags can be combined: `python3 rental_search.py --cli --diff`
 
 ---
 
-### `download_photos.py` — download Airbnb photos
+### `scraper/download_photos.py` — download Airbnb photos
 
 Run this after adding new Airbnb listings manually to pull photos from the CDN into each listing folder and rewrite `listing.html` to use local paths.
 
 ```bash
-python3 download_photos.py
+python3 scraper/download_photos.py
 ```
 
 Run from inside the project folder. Each listing folder gets up to 6 photos (`photo_01.jpg` … `photo_06.jpg`).
@@ -114,9 +114,11 @@ Run from inside the project folder. Each listing folder gets up to 6 photos (`ph
 
 ```
 Todos Santos Rentals/
-├── rental_search.py          # Main search + scrape script
-├── download_photos.py        # Download Airbnb photos to local folders
-├── test_rental_search.py     # Unit tests
+├── scraper/
+│   ├── rental_search.py          # Main search + scrape script
+│   ├── download_photos.py        # Download Airbnb photos to local folders
+│   └── test_rental_search.py     # Unit tests
+├── dashboard/                     # Dashboard generator (coming soon)
 └── rentals/
     ├── airbnb-01-studio-1339usd/       # One folder per listing
     │   ├── info.json                   # Normalized metadata
@@ -165,7 +167,7 @@ MXN prices are converted to USD at **17.5 MXN/USD**. Listings over $2,000/month 
 ## Running tests
 
 ```bash
-python3 -m pytest test_rental_search.py -v
+python3 -m pytest scraper/test_rental_search.py -v
 ```
 
 All network calls and subprocess calls are mocked — tests run offline with no API key required.
