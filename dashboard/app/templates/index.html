@@ -12,6 +12,10 @@
       .header h1 { margin: 0 0 8px; font-size: 28px; }
       .controls { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; margin-bottom: 16px; }
       .controls input, .controls select { padding: 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; }
+      .saved-search-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 0 0 12px; }
+      .saved-search-row input { padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px; min-width: 240px; }
+      .saved-search-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      .saved-chip { border: 1px solid #c7d2fe; background: #eef2ff; color: #312e81; border-radius: 999px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
       .layout { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
       .panel { background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px; }
       .muted { color: #6b7280; font-size: 13px; }
@@ -30,6 +34,13 @@
       .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       .loading-indicator { display: none; margin: 8px 0 12px; font-size: 13px; color: #4b5563; }
       .htmx-request .loading-indicator { display: block; }
+      .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+      .chip { border: 1px solid #bfdbfe; background: #eff6ff; color: #1e3a8a; border-radius: 999px; padding: 4px 10px; font-size: 12px; }
+      .chip button { margin-left: 6px; border: 0; background: transparent; color: #1d4ed8; cursor: pointer; font-size: 12px; }
+      @media (max-width: 800px) {
+        .controls { grid-template-columns: 1fr; }
+        .layout { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -51,6 +62,14 @@
         <input type="hidden" name="page" value="{{ search.page }}" id="page-input" />
         <input type="hidden" name="per_page" value="{{ search.per_page }}" />
 
+        <div class="saved-search-row">
+          <label for="saved-search-name" class="sr-only">Saved search name</label>
+          <input id="saved-search-name" type="text" placeholder="Save current filters as…" />
+          <button type="button" id="save-search-btn">Save Search</button>
+          <span class="muted">Tip: press <kbd>/</kbd> to focus search</span>
+        </div>
+        <div id="saved-searches" class="saved-search-list" aria-label="Saved searches"></div>
+
         <div class="controls">
           <label for="q" class="sr-only">Search rentals</label>
           <input id="q" name="q" type="text" placeholder="Search title, description, location..." value="{{ search.query }}" />
@@ -64,6 +83,8 @@
           <button type="submit">Search</button>
         </div>
 
+        <div id="active-filters" class="chips" aria-label="Active filters"></div>
+
         <div id="search-loading" class="loading-indicator" role="status" aria-live="polite">Updating results…</div>
 
         <div id="search-content" aria-live="polite" aria-label="Search results and facets">
@@ -71,5 +92,157 @@
         </div>
       </form>
     </main>
+
+    <script>
+      (function () {
+        const STORAGE_KEY = "dashboard_saved_searches_v1";
+        const form = document.getElementById("search-form");
+        const searchInput = document.getElementById("q");
+        const pageInput = document.getElementById("page-input");
+        const chipsContainer = document.getElementById("active-filters");
+        const savedSearchesContainer = document.getElementById("saved-searches");
+        const savedSearchNameInput = document.getElementById("saved-search-name");
+        const saveSearchButton = document.getElementById("save-search-btn");
+
+        function getSavedSearches() {
+          try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+          } catch (error) {
+            return [];
+          }
+        }
+
+        function setSavedSearches(savedSearches) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(savedSearches));
+        }
+
+        function toParams(formElement) {
+          return new URLSearchParams(new FormData(formElement));
+        }
+
+        function submitSearch() {
+          if (pageInput) {
+            pageInput.value = "1";
+          }
+          if (window.htmx) {
+            window.htmx.trigger(form, "submit");
+          }
+        }
+
+        function renderSavedSearches() {
+          const savedSearches = getSavedSearches();
+          savedSearchesContainer.innerHTML = "";
+          for (const entry of savedSearches) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "saved-chip";
+            button.textContent = entry.name;
+            button.addEventListener("click", () => {
+              const params = new URLSearchParams(entry.params);
+              for (const [key] of toParams(form)) {
+                if (key !== "per_page") {
+                  const controls = form.querySelectorAll(`[name="${CSS.escape(key)}"]`);
+                  controls.forEach((control) => {
+                    if (control.type === "checkbox" || control.type === "radio") {
+                      control.checked = false;
+                    } else {
+                      control.value = "";
+                    }
+                  });
+                }
+              }
+
+              for (const [key, value] of params.entries()) {
+                const controls = form.querySelectorAll(`[name="${CSS.escape(key)}"]`);
+                controls.forEach((control) => {
+                  if (control.type === "checkbox") {
+                    if (control.value === value) {
+                      control.checked = true;
+                    }
+                  } else {
+                    control.value = value;
+                  }
+                });
+              }
+              submitSearch();
+            });
+            savedSearchesContainer.appendChild(button);
+          }
+        }
+
+        function renderActiveFilterChips() {
+          const params = toParams(form);
+          chipsContainer.innerHTML = "";
+          const skip = new Set(["page", "per_page"]);
+          params.forEach((value, key) => {
+            if (!value || skip.has(key)) {
+              return;
+            }
+            const chip = document.createElement("span");
+            chip.className = "chip";
+            chip.textContent = `${key.replaceAll("_", " ")}: ${value}`;
+
+            const closeButton = document.createElement("button");
+            closeButton.type = "button";
+            closeButton.setAttribute("aria-label", `Remove ${key} ${value}`);
+            closeButton.textContent = "×";
+            closeButton.addEventListener("click", () => {
+              const controls = form.querySelectorAll(`[name="${CSS.escape(key)}"]`);
+              controls.forEach((control) => {
+                if (control.type === "checkbox" && control.value === value) {
+                  control.checked = false;
+                } else if (control.type !== "checkbox") {
+                  control.value = "";
+                }
+              });
+              submitSearch();
+            });
+
+            chip.appendChild(closeButton);
+            chipsContainer.appendChild(chip);
+          });
+        }
+
+        saveSearchButton.addEventListener("click", () => {
+          const name = (savedSearchNameInput.value || "").trim();
+          if (!name) {
+            return;
+          }
+          const params = toParams(form);
+          params.delete("page");
+          const savedSearches = getSavedSearches();
+          const updated = [{ name, params: params.toString() }, ...savedSearches.filter((entry) => entry.name !== name)].slice(0, 8);
+          setSavedSearches(updated);
+          savedSearchNameInput.value = "";
+          renderSavedSearches();
+        });
+
+        form.addEventListener("change", renderActiveFilterChips);
+        form.addEventListener("keyup", (event) => {
+          if (event.target && event.target.id === "q") {
+            renderActiveFilterChips();
+          }
+        });
+
+        document.body.addEventListener("htmx:afterSwap", (event) => {
+          if (event.target && event.target.id === "search-content") {
+            renderActiveFilterChips();
+          }
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "/" && event.target !== searchInput && !event.metaKey && !event.ctrlKey) {
+            event.preventDefault();
+            searchInput.focus();
+          }
+          if (event.key === "Escape" && document.activeElement === searchInput) {
+            searchInput.blur();
+          }
+        });
+
+        renderSavedSearches();
+        renderActiveFilterChips();
+      })();
+    </script>
   </body>
 </html>

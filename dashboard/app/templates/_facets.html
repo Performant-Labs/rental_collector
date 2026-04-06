@@ -9,7 +9,14 @@
         {% set checked = value in search.selected_filters.get(field, []) %}
         <label class="facet-option">
           <span>
-            <input type="checkbox" name="{{ field }}" value="{{ value }}" {% if checked %}checked{% endif %} />
+            <input
+              type="checkbox"
+              name="{{ field }}"
+              value="{{ value }}"
+              data-facet-field="{{ field }}"
+              data-facet-value="{{ value }}"
+              {% if checked %}checked{% endif %}
+            />
             {{ value }}
           </span>
           <span class="muted">{{ count }}</span>

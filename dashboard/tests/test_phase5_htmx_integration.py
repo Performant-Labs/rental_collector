@@ -85,3 +85,8 @@ def test_htmx_url_state_roundtrip_for_search_and_filters(monkeypatch):
     assert 'hx-push-url="true"' in response.text
     assert 'name="q"' in response.text
     assert 'value="mar"' in response.text
+    assert 'id="saved-search-name"' in response.text
+    assert 'id="save-search-btn"' in response.text
+    assert 'id="saved-searches"' in response.text
+    assert 'id="active-filters"' in response.text
+    assert "press <kbd>/</kbd> to focus search" in response.text

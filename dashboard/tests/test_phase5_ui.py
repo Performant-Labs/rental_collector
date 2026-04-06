@@ -67,6 +67,8 @@ def test_selected_filters_are_marked_active(monkeypatch):
 
     assert response.status_code == 200
     assert "checked" in response.text
+    assert 'data-facet-field="source"' in response.text
+    assert 'data-facet-value="airbnb"' in response.text
 
 
 def test_empty_state_message_renders(monkeypatch):
