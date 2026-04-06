@@ -1,0 +1,23 @@
+{% if search.results %}
+  <div class="results-grid">
+    {% for listing in search.results %}
+      <article class="card">
+        <h3>{{ listing.title or "Untitled" }}</h3>
+        <div class="muted">{{ listing.location or "Todos Santos" }}</div>
+        {% if listing.source %}<div class="pill">{{ listing.source }}</div>{% endif %}
+        <div style="margin-top:8px;">
+          {% if listing.price_usd %}
+            <strong>${{ listing.price_usd }}/mo</strong>
+          {% else %}
+            <span class="muted">Price unknown</span>
+          {% endif %}
+        </div>
+        <div style="margin-top:8px;">
+          <a href="/{{ listing.listing_path }}" target="_blank">Open listing</a>
+        </div>
+      </article>
+    {% endfor %}
+  </div>
+{% else %}
+  <p class="muted">No results found for the current filters.</p>
+{% endif %}

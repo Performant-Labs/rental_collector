@@ -104,29 +104,29 @@ All phases in this checklist should follow:
 
 ## Phase 5 — HTMX UI (results, facet panel, controls)
 
-- [ ] Build full page shell template
-- [ ] Build results partial template
-- [ ] Build facets partial template
-- [ ] Build pagination partial template
-- [ ] Wire HTMX live search input (debounced)
-- [ ] Wire HTMX facet toggles and filter chips
-- [ ] Wire HTMX sort changes
-- [ ] Wire HTMX pagination
-- [ ] Add URL sync with `hx-push-url` for shareable state
-- [ ] Verify dashboard is fully searchable with HTMX
-- [ ] Verify card links target `rentals/{folder}/listing.html`
+- [x] Build full page shell template
+- [x] Build results partial template
+- [x] Build facets partial template
+- [x] Build pagination partial template
+- [x] Wire HTMX live search input (debounced)
+- [x] Wire HTMX facet toggles and filter chips
+- [x] Wire HTMX sort changes
+- [x] Wire HTMX pagination
+- [x] Add URL sync with `hx-push-url` for shareable state
+- [x] Verify dashboard is fully searchable with HTMX
+- [x] Verify card links target `rentals/{folder}/listing.html`
 
 ### Unit tests (required before Phase 6)
-- [ ] `test_results_partial_renders_listing_cards`
-- [ ] `test_facet_partial_renders_counts`
-- [ ] `test_selected_filters_are_marked_active`
-- [ ] `test_empty_state_message_renders`
-- [ ] `test_listing_card_link_points_to_local_listing_html`
+- [x] `test_results_partial_renders_listing_cards`
+- [x] `test_facet_partial_renders_counts`
+- [x] `test_selected_filters_are_marked_active`
+- [x] `test_empty_state_message_renders`
+- [x] `test_listing_card_link_points_to_local_listing_html`
 
 ### Integration tests (required before Phase 6)
-- [ ] `test_htmx_results_partial_updates_from_search`
-- [ ] `test_htmx_facet_selection_updates_results_and_counts`
-- [ ] `test_htmx_url_state_roundtrip_for_search_and_filters`
+- [x] `test_htmx_results_partial_updates_from_search`
+- [x] `test_htmx_facet_selection_updates_results_and_counts`
+- [x] `test_htmx_url_state_roundtrip_for_search_and_filters`
 
 ---
 

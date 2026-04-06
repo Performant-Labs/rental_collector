@@ -1,0 +1,27 @@
+{% if search.total_pages > 1 %}
+  <div class="pagination">
+    {% if search.page > 1 %}
+      <a
+        href="#"
+        hx-get="/partials/search"
+        hx-target="#search-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-include="#search-form"
+        hx-vals='{"page": {{ search.page - 1 }} }'
+      >Prev</a>
+    {% endif %}
+    <span class="muted">Page {{ search.page }} of {{ search.total_pages }}</span>
+    {% if search.page < search.total_pages %}
+      <a
+        href="#"
+        hx-get="/partials/search"
+        hx-target="#search-content"
+        hx-swap="innerHTML"
+        hx-push-url="true"
+        hx-include="#search-form"
+        hx-vals='{"page": {{ search.page + 1 }} }'
+      >Next</a>
+    {% endif %}
+  </div>
+{% endif %}

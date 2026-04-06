@@ -39,11 +39,86 @@ def health() -> dict[str, str]:
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request):
+def home(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    search = _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"title": "Todos Santos Rentals Dashboard"},
+        context={
+            "title": "Todos Santos Rentals Dashboard",
+            "search": search,
+            "facet_fields": FACET_FIELDS,
+        },
+    )
+
+
+@app.get("/partials/search", response_class=HTMLResponse)
+def partial_search(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    search = _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
+    return templates.TemplateResponse(
+        request=request,
+        name="_search_content.html",
+        context={"search": search, "facet_fields": FACET_FIELDS},
+    )
+
+
+@app.get("/partials/results", response_class=HTMLResponse)
+def partial_results(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    search = _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
+    return templates.TemplateResponse(
+        request=request,
+        name="_results.html",
+        context={"search": search},
+    )
+
+
+@app.get("/partials/facets", response_class=HTMLResponse)
+def partial_facets(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    search = _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
+    return templates.TemplateResponse(
+        request=request,
+        name="_facets.html",
+        context={"search": search, "facet_fields": FACET_FIELDS},
+    )
+
+
+@app.get("/partials/pagination", response_class=HTMLResponse)
+def partial_pagination(
+    request: Request,
+    q: str = "",
+    sort: str = "relevance",
+    page: int = 1,
+    per_page: int = 20,
+):
+    search = _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
+    return templates.TemplateResponse(
+        request=request,
+        name="_pagination.html",
+        context={"search": search},
     )
 
 
@@ -54,6 +129,41 @@ def _parse_facet_filters(request: Request) -> dict[str, list[str]]:
     return facet_filters
 
 
+def _run_search(
+    request: Request,
+    *,
+    q: str,
+    sort: str,
+    page: int,
+    per_page: int,
+):
+    facet_filters = _parse_facet_filters(request)
+    client = MeilisearchIndexClient.from_env()
+    try:
+        return perform_search(
+            client=client,
+            query=q,
+            facet_filters=facet_filters,
+            sort_option=sort,
+            page=page,
+            per_page=per_page,
+        )
+    except Exception:
+        safe_page = max(1, page)
+        safe_per_page = max(1, min(per_page, 100))
+        return {
+            "query": q,
+            "results": [],
+            "total_hits": 0,
+            "page": safe_page,
+            "per_page": safe_per_page,
+            "total_pages": 0,
+            "sort": sort,
+            "facets": {},
+            "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
+        }
+
+
 @app.get("/api/search")
 def search_endpoint(
     request: Request,
@@ -62,13 +172,4 @@ def search_endpoint(
     page: int = 1,
     per_page: int = 20,
 ):
-    client = MeilisearchIndexClient.from_env()
-    facet_filters = _parse_facet_filters(request)
-    return perform_search(
-        client=client,
-        query=q,
-        facet_filters=facet_filters,
-        sort_option=sort,
-        page=page,
-        per_page=per_page,
-    )
+    return _run_search(request, q=q, sort=sort, page=page, per_page=per_page)
