@@ -96,9 +96,9 @@ All phases in this checklist should follow:
 - [x] `test_pagination_offsets_are_correct`
 
 ### Integration tests (start in Phase 4)
-- [ ] `test_api_search_endpoint_returns_expected_contract`
-- [ ] `test_api_search_endpoint_with_facets_and_sort`
-- [ ] `test_api_search_endpoint_pagination_contract`
+- [x] `test_api_search_endpoint_returns_expected_contract`
+- [x] `test_api_search_endpoint_with_facets_and_sort`
+- [x] `test_api_search_endpoint_pagination_contract`
 
 ---
 
