@@ -53,7 +53,13 @@ def _normalise_source(raw_source: Any, folder_name: str) -> str:
 
 
 def _is_valid_document(document: dict[str, Any]) -> bool:
-    return bool(document.get("title"))
+    # Must have title and valid price to be a rental (filters out tours/activities)
+    if not document.get("title"):
+        return False
+    price = document.get("price_usd")
+    if price is None or not isinstance(price, int) or price <= 0:
+        return False
+    return True
 
 
 def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, Any]:

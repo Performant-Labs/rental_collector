@@ -73,6 +73,7 @@ def test_generates_stable_document_id(tmp_path: Path):
             "title": "Casita",
             "source": "airbnb",
             "url": "https://example.com/listing/1",
+            "price_usd": 1200,
         },
     )
     raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
@@ -85,23 +86,33 @@ def test_generates_stable_document_id(tmp_path: Path):
 
 
 def test_skips_invalid_listing_without_crashing(tmp_path: Path):
+    # Valid rental with price
     _make_listing_folder(
         tmp_path,
         "airbnb-01-valid-1000usd",
-        {"title": "Valid Title", "source": "airbnb"},
+        {"title": "Valid Title", "source": "airbnb", "price_usd": 1000},
     )
+    # Missing title
     _make_listing_folder(
         tmp_path,
         "airbnb-02-invalid-1000usd",
-        {"source": "airbnb"},
+        {"source": "airbnb", "price_usd": 1000},
+    )
+    # Missing price (like a tour/activity)
+    _make_listing_folder(
+        tmp_path,
+        "airbnb-03-tour-no-price",
+        {"title": "City Tour", "source": "airbnb"},
     )
 
     documents, warnings = build_documents_from_rentals(tmp_path)
 
     assert len(documents) == 1
     assert documents[0]["title"] == "Valid Title"
-    assert len(warnings) == 1
-    assert warnings[0]["folder"] == "airbnb-02-invalid-1000usd"
+    assert len(warnings) == 2
+    warning_folders = {w["folder"] for w in warnings}
+    assert "airbnb-02-invalid-1000usd" in warning_folders
+    assert "airbnb-03-tour-no-price" in warning_folders
 
 
 def test_price_extraction_supports_both_camel_and_snake_case(tmp_path: Path):
