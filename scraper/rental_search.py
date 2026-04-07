@@ -921,7 +921,7 @@ def is_listing_active(url: str) -> bool:
 
 
 def save_listing_folders(listings: List[dict]):
-    """For each listing: verify it is active AND has valid rent price, then create/update/skip its folder."""
+    """For each listing: verify it is active AND looks like a rental, then create/update/skip its folder."""
     source = listings[0].get("source", "unknown") if listings else "unknown"
     existing = _scan_existing(source)
     start_index = _next_index(source)
@@ -932,10 +932,17 @@ def save_listing_folders(listings: List[dict]):
         tkey  = _listing_key(listing)
         match = existing.get(url) or existing.get(tkey)
 
-        # Skip listings without valid monthly rent price (tours, activities, etc.)
+        # Determine if this is actually a rental (not a tour/activity)
+        # Keep if: has valid price OR has strong rental keywords
         price = listing.get("price_usd")
-        if price is None or not isinstance(price, int) or price <= 0:
-            print(f"  ✗ no valid rent price — skipping: {listing.get('title', '')[:60]}")
+        has_valid_price = price is not None and isinstance(price, int) and price > 0
+
+        title_desc = f"{listing.get('title', '')} {listing.get('description', '')}".lower()
+        has_rental_keywords = bool(_RENTAL_KEYWORDS_STRONG.search(title_desc))
+
+        if not has_valid_price and not has_rental_keywords:
+            # Likely a tour/activity without monthly rent price
+            print(f"  ✗ no rent price + no rental keywords — skipping: {listing.get('title', '')[:60]}")
             skipped_count += 1
             continue
 

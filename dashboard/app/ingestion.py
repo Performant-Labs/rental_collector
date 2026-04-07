@@ -7,6 +7,13 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_RENTALS_DIR = REPO_ROOT / "rentals"
 
+# Strong rental keywords - if a listing has these, it's likely a rental even without price
+_RENTAL_KEYWORDS_STRONG = re.compile(
+    r"\brent\b|\brental\b|\bfor\s+rent\b|\bse\s+renta\b|\bse\s+alquila\b"
+    r"|\bcuarto\b|\bhabitaci[oó]n\b|\bapartment\b|\bbedroom\b",
+    re.I,
+)
+
 
 def discover_listing_folders(rentals_dir: Path = DEFAULT_RENTALS_DIR) -> list[Path]:
     if not rentals_dir.exists():
@@ -53,13 +60,22 @@ def _normalise_source(raw_source: Any, folder_name: str) -> str:
 
 
 def _is_valid_document(document: dict[str, Any]) -> bool:
-    # Must have title and valid price to be a rental (filters out tours/activities)
+    """Validate document is a rental (not a tour/activity).
+
+    Valid if: has title AND (has valid price OR has strong rental keywords)
+    """
     if not document.get("title"):
         return False
+
     price = document.get("price_usd")
-    if price is None or not isinstance(price, int) or price <= 0:
-        return False
-    return True
+    has_valid_price = price is not None and isinstance(price, int) and price > 0
+
+    # Check for strong rental keywords in title and description
+    title_desc = f"{document.get('title', '')} {document.get('description', '')}".lower()
+    has_rental_keywords = bool(_RENTAL_KEYWORDS_STRONG.search(title_desc))
+
+    # Valid if has price OR has rental keywords (allows "contact for price" rentals)
+    return has_valid_price or has_rental_keywords
 
 
 def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, Any]:
