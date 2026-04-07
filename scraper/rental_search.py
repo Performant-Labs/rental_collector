@@ -921,7 +921,7 @@ def is_listing_active(url: str) -> bool:
 
 
 def save_listing_folders(listings: List[dict]):
-    """For each listing: verify it is active, then create/update/skip its folder."""
+    """For each listing: verify it is active AND has valid rent price, then create/update/skip its folder."""
     source = listings[0].get("source", "unknown") if listings else "unknown"
     existing = _scan_existing(source)
     start_index = _next_index(source)
@@ -931,6 +931,13 @@ def save_listing_folders(listings: List[dict]):
         url   = listing.get("url")
         tkey  = _listing_key(listing)
         match = existing.get(url) or existing.get(tkey)
+
+        # Skip listings without valid monthly rent price (tours, activities, etc.)
+        price = listing.get("price_usd")
+        if price is None or not isinstance(price, int) or price <= 0:
+            print(f"  ✗ no valid rent price — skipping: {listing.get('title', '')[:60]}")
+            skipped_count += 1
+            continue
 
         if match is None:
             if not is_listing_active(url):
@@ -954,7 +961,7 @@ def save_listing_folders(listings: List[dict]):
     if updated_count:
         parts.append(f"{updated_count} updated")
     if skipped_count:
-        parts.append(f"{skipped_count} inactive")
+        parts.append(f"{skipped_count} skipped")
     if not parts:
         parts.append("no changes")
     print(f"  [{source}] {', '.join(parts)}")
