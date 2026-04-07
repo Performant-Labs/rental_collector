@@ -645,25 +645,38 @@ def _esc(text) -> str:
 
 
 def generate_listing_html(listing: dict) -> str:
-    source      = listing.get("source", "")
+    # Resolve fields that may differ between raw Airbnb JSON and normalised dicts
+    source      = str(listing.get("source") or "").strip().lower()
+    if not source:
+        # Fallback: derive from the Airbnb URL field names used before normalise()
+        # ('link' key) or guess from the presence of an airbnb.com URL
+        link_val = listing.get("link") or listing.get("url") or ""
+        if "airbnb.com" in link_val:
+            source = "airbnb"
+    url          = listing.get("url") or listing.get("link") or ""
+    scraped      = _esc(listing.get("scraped") or TODAY)
+
     color       = SOURCE_COLORS.get(source, "#444")
     title       = _esc(listing.get("title") or "Untitled")
-    price       = listing.get("price_usd")
+    price       = listing.get("price_usd") or listing.get("usdPerMonth")
+    if price is not None:
+        try:
+            price = int(price)
+        except (TypeError, ValueError):
+            price = None
     price_str   = f"${price}" if price else "—"
     bedrooms    = _esc(listing.get("bedrooms") or "")
     location    = _esc(listing.get("location") or "Todos Santos")
     rating      = _esc(listing.get("rating") or "")
-    listing_type = _esc(listing.get("listing_type") or "")
-    description  = _esc(listing.get("description") or "")
+    listing_type = _esc(listing.get("listing_type") or listing.get("listingType") or "")
+    description  = _esc(listing.get("description") or listing.get("notes") or "")
     amenities    = listing.get("amenities") or []
     checkin      = _esc(listing.get("checkin") or "")
     checkout     = _esc(listing.get("checkout") or "")
-    url          = listing.get("url") or ""
     contact      = _esc(listing.get("contact") or "")
-    scraped      = _esc(listing.get("scraped") or TODAY)
     local_photos = listing.get("localPhotos") or []
 
-    source_label = _esc(source.replace("-", " ").title())
+    source_label = _esc(source.replace("-", " ").title()) if source else "Rental"
     cta_label    = f"View on {source_label} →" if url else ""
 
     # Photo block

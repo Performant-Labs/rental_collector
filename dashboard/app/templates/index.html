@@ -53,7 +53,7 @@
         hx-swap="innerHTML"
         hx-push-url="true"
         hx-indicator="#search-loading"
-        hx-trigger="submit, keyup changed delay:350ms from:#q, change from:select, change from:input[type=checkbox]"
+        hx-trigger="submit, keyup changed delay:350ms from:#q, change"
       >
         <input type="hidden" name="page" value="{{ search.page }}" id="page-input" />
         <input type="hidden" name="per_page" value="{{ search.per_page }}" />
