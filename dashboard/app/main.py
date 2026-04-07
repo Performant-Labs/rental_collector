@@ -5,6 +5,7 @@ import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from dashboard.app.indexing_commands import bootstrap_ingest_if_enabled
@@ -12,6 +13,7 @@ from dashboard.app.meilisearch_index_client import MeilisearchIndexClient
 from dashboard.app.search_service import FACET_FIELDS, perform_search
 
 BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent.parent  # dashboard/app -> dashboard -> repo root
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 logger = logging.getLogger("dashboard.app")
 
@@ -20,6 +22,9 @@ MAX_PER_PAGE = 100
 MIN_PER_PAGE = 1
 
 app = FastAPI(title="Todos Santos Rentals Dashboard")
+
+# Serve static rental listing files
+app.mount("/rentals", StaticFiles(directory=str(REPO_ROOT / "rentals"), html=True), name="rentals")
 
 
 @app.middleware("http")

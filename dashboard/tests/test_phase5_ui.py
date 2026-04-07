@@ -90,3 +90,11 @@ def test_listing_card_link_points_to_local_listing_html(monkeypatch):
 
     assert response.status_code == 200
     assert 'href="/rentals/airbnb-01-casita/listing.html"' in response.text
+
+
+def test_static_rental_listing_files_are_served():
+    response = client.get("/rentals/airbnb-06-hotel-todos-santos-1186usd/listing.html")
+
+    assert response.status_code == 200
+    assert response.headers.get("content-type", "").startswith("text/html")
+    assert "<!DOCTYPE html>" in response.text or "<html" in response.text.lower()
