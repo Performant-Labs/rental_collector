@@ -60,7 +60,7 @@ def test_parses_info_json_to_document(tmp_path: Path):
     assert document["title"] == "Studio Centro"
     assert document["source"] == "craigslist"
     assert document["price_usd"] == 900
-    assert document["price_bucket"] == "<1000"
+    assert document["price_bucket"] == "500-999"
     assert document["has_photos"] is True
     assert document["has_contact"] is True
 
@@ -130,10 +130,19 @@ def test_price_extraction_supports_both_camel_and_snake_case(tmp_path: Path):
 
 def test_price_bucket_computation():
     assert compute_price_bucket(None) == "unknown"
-    assert compute_price_bucket(999) == "<1000"
+    assert compute_price_bucket(499) == "<500"
+    assert compute_price_bucket(500) == "500-999"
+    assert compute_price_bucket(999) == "500-999"
     assert compute_price_bucket(1000) == "1000-1499"
     assert compute_price_bucket(1499) == "1000-1499"
-    assert compute_price_bucket(1500) == "1500-2000"
+    assert compute_price_bucket(1500) == "1500-1999"
+    assert compute_price_bucket(1999) == "1500-1999"
+    assert compute_price_bucket(2000) == "2000-2499"
+    assert compute_price_bucket(2499) == "2000-2499"
+    assert compute_price_bucket(2500) == "2500-2999"
+    assert compute_price_bucket(2999) == "2500-2999"
+    assert compute_price_bucket(3000) == "3000+"
+    assert compute_price_bucket(5000) == "3000+"
 
 
 def test_idempotent_upsert_documents():
