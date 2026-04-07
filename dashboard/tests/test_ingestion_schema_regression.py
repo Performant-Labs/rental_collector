@@ -75,8 +75,8 @@ def test_ingestion_handles_real_scraper_output():
             # Validate price_bucket is computed correctly
             price_bucket = document.get("price_bucket")
             assert isinstance(price_bucket, str), f"{folder.name}: price_bucket must be string"
-            valid_buckets = {"unknown", "<500", "500-999", "1000-1499", "1500-1999", "2000-2499", "2500-2999", "3000+"}
-            assert price_bucket in valid_buckets, f"{folder.name}: invalid price_bucket {price_bucket}"
+            # Price buckets are now open-ended $500 chunks: <500, 500+, 1000+, 1500+, etc.
+            assert price_bucket == "unknown" or price_bucket.endswith("+"), f"{folder.name}: invalid price_bucket format {price_bucket}"
 
             # Cross-check: if usdPerMonth exists in raw, price_usd should be populated
             if "usdPerMonth" in raw and raw["usdPerMonth"] is not None:

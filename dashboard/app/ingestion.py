@@ -25,21 +25,14 @@ def parse_listing_info(info_path: Path) -> dict[str, Any]:
 
 
 def compute_price_bucket(price_usd: int | None) -> str:
+    """Compute price bucket in $500 chunks, no upper limit."""
     if price_usd is None:
         return "unknown"
     if price_usd < 500:
         return "<500"
-    if price_usd < 1000:
-        return "500-999"
-    if price_usd < 1500:
-        return "1000-1499"
-    if price_usd < 2000:
-        return "1500-1999"
-    if price_usd < 2500:
-        return "2000-2499"
-    if price_usd < 3000:
-        return "2500-2999"
-    return "3000+"
+    # $500 chunks with no maximum
+    bucket_start = (price_usd // 500) * 500
+    return f"{bucket_start}+"
 
 
 def stable_listing_id(source: str, url: str | None, title: str, folder_name: str) -> str:
