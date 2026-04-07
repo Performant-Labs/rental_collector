@@ -104,6 +104,30 @@ def test_skips_invalid_listing_without_crashing(tmp_path: Path):
     assert warnings[0]["folder"] == "airbnb-02-invalid-1000usd"
 
 
+def test_price_extraction_supports_both_camel_and_snake_case(tmp_path: Path):
+    # Test usdPerMonth (camelCase from scraper)
+    folder_camel = _make_listing_folder(
+        tmp_path,
+        "airbnb-01-camel-1200usd",
+        {"title": "CamelCase Price", "usdPerMonth": 1200},
+    )
+    raw_camel = json.loads((folder_camel / "info.json").read_text(encoding="utf-8"))
+    doc_camel = normalise_listing_document(raw_camel, folder_camel)
+    assert doc_camel["price_usd"] == 1200
+    assert doc_camel["price_bucket"] == "1000-1499"
+
+    # Test price_usd (snake_case fallback)
+    folder_snake = _make_listing_folder(
+        tmp_path,
+        "airbnb-02-snake-1100usd",
+        {"title": "SnakeCase Price", "price_usd": 1100},
+    )
+    raw_snake = json.loads((folder_snake / "info.json").read_text(encoding="utf-8"))
+    doc_snake = normalise_listing_document(raw_snake, folder_snake)
+    assert doc_snake["price_usd"] == 1100
+    assert doc_snake["price_bucket"] == "1000-1499"
+
+
 def test_price_bucket_computation():
     assert compute_price_bucket(None) == "unknown"
     assert compute_price_bucket(999) == "<1000"

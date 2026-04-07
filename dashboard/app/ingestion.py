@@ -59,7 +59,8 @@ def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, A
     source = _normalise_source(raw.get("source"), folder.name)
     title = str(raw.get("title") or "").strip()
     url = raw.get("url")
-    price_raw = raw.get("price_usd")
+    # Support both usdPerMonth (camelCase from scraper) and price_usd (snake_case fallback)
+    price_raw = raw.get("usdPerMonth") or raw.get("price_usd")
     try:
         price_usd = int(price_raw) if price_raw is not None else None
     except (TypeError, ValueError):
