@@ -28,8 +28,8 @@ def compute_price_bucket(price_usd: int | None) -> str:
     """Compute price bucket in $500 chunks, no upper limit."""
     if price_usd is None:
         return "unknown"
-    if price_usd < 500:
-        return "<500"
+    if price_usd < 1000:
+        return "<1000"
     # $500 chunks with no maximum
     bucket_start = (price_usd // 500) * 500
     return f"{bucket_start}+"
