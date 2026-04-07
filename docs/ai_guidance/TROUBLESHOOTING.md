@@ -1,6 +1,6 @@
 # Hanging Processes — Root Causes & Solutions
 
-This document catalogs every type of process hang encountered in the Open Social build/test workflow, explains why each hang occurs, and provides the fix.
+This document catalogs every type of process hang encountered in DDEV/Drupal/Playwright workflows, explains why each hang occurs, and provides the fix.
 
 ---
 
@@ -15,6 +15,7 @@ This document catalogs every type of process hang encountered in the Open Social
 | 13 | Nested DDEV project error | `ddev start` fails or behaves oddly | Remove parent `~/Sites/.ddev/` |
 | 19 | DDEV `stop` flag confusion | `ddev stop -y` fails | Use `ddev stop projectname` (no `-y`) |
 | 20 | DDEV port variability | Tests fail with connection refused | Check `ddev describe`, update config |
+| 26 | `php:eval` entity save hang | `ddev drush php:eval` with `->save()` hangs silently for 10+ min | Check logs at 10s; use `config:import --partial` instead |
 
 ### B. Playwright / Testing
 
@@ -65,7 +66,7 @@ The `beforeEach` hook calls:
 ```typescript
 await page.waitForLoadState('networkidle');
 ```
-`networkidle` waits until there are **zero network connections for 500ms**. Open Social has perpetual background AJAX requests (heartbeat polling, notification checks, etc.) that **never stop**. The condition never resolves.
+`networkidle` waits until there are **zero network connections for 500ms**. Many Drupal distributions have perpetual background AJAX requests (heartbeat polling, notification checks, etc.) that **never stop**. The condition never resolves.
 
 ### Detection
 - Tests hang consistently on the first test
@@ -83,12 +84,8 @@ await page.waitForLoadState('load');
 ```
 
 ### Prevention
-- **Never use `networkidle`** with Open Social or any Drupal site that has background AJAX
+- **Never use `networkidle`** with any Drupal site that has background AJAX
 - Add a comment in the test file explaining why `load` is used
-- The BUILD_LOG includes a `[!CAUTION]` block about this
-
-### Files affected
-- `tests/e2e/phase1-content-types.spec.ts` — line 12
 
 ---
 
@@ -123,7 +120,6 @@ export default defineConfig({
 
 ### Prevention
 - Always set these timeouts when configuring a new test environment
-- The BUILD_LOG Step 230 documents the correct values
 
 ---
 
@@ -143,20 +139,19 @@ pgrep -f "chromium" | head
 ```
 
 ### Solution
-Run the zombie cleanup script:
+Run the zombie cleanup script if your project has one:
 ```bash
-bash ~/Sites/pl-opensocial/scripts/kill-zombies.sh
+bash /path/to/your/project/scripts/kill-zombies.sh
 ```
 
 Or manually:
 ```bash
-pkill -f "playwright"
+pkill -f "node.*playwright"
 pkill -f "chromium"
 ```
 
 ### Prevention
-- Run `kill-zombies.sh` **before** every test phase
-- The BUILD_LOG instructs running this script before each phase
+- Run process cleanup **before** every test phase
 - Always let tests complete rather than cancelling mid-run when possible
 
 ---
@@ -168,7 +163,7 @@ A `ddev drush` or `ddev exec` command never returns. The terminal sits with no o
 
 ### Root Cause
 Multiple possible causes:
-1. **Targeting a stopped project**: If the DDEV project (e.g., `pl-opensocial`) isn't running but you issue `ddev drush` from its directory, the command hangs waiting for the container
+1. **Targeting a stopped project**: If the DDEV project isn't running but you issue `ddev drush` from its directory, the command hangs waiting for the container
 2. **Container unhealthy**: The web or database container is in a degraded state
 3. **PHP fatal error in Drush**: A bootstrap error can cause Drush to hang silently
 
@@ -230,7 +225,7 @@ ddev exec ps aux | grep php
 Event Type dropdown appears on the form but has **zero options** — only "- Select a value -". No error is displayed. Tests waiting to select an option hang until timeout.
 
 ### Root Cause
-The vocabulary machine name is `event_types` (**plural**), but the BUILD_LOG originally created terms with `vid => "event_type"` (singular). Drupal silently accepts terms with a non-existent `vid` — the terms are saved to the database but orphaned. The `taxonomy_access_fix` module's `TermSelection` handler calls `loadTree('event_type')`, which returns nothing because the vocabulary `event_type` doesn't exist.
+The vocabulary machine name may differ from what was used when creating terms (e.g., `event_types` plural vs `event_type` singular). Drupal silently accepts terms with a non-existent `vid` — the terms are saved to the database but orphaned. The `taxonomy_access_fix` module's `TermSelection` handler calls `loadTree()` with the wrong name, which returns nothing because the vocabulary doesn't exist under that name.
 
 ### Detection
 ```bash
@@ -263,10 +258,9 @@ foreach (["User group meeting", "DrupalCon", "Sprint"] as $name) {
 ```
 
 ### Prevention
-- The BUILD_LOG Step 170 now uses `event_types` with a `[!CAUTION]` warning
 - Always verify vocabulary machine names before creating terms:
   ```bash
-  ddev drush ev 'echo \Drupal::entityTypeManager()->getStorage("taxonomy_vocabulary")->load("event_types")->label();'
+  ddev drush ev 'echo \Drupal::entityTypeManager()->getStorage("taxonomy_vocabulary")->load("your_vocab_name")->label();'
   ```
 
 ---
@@ -277,13 +271,13 @@ foreach (["User group meeting", "DrupalCon", "Sprint"] as $name) {
 Same as #6 — Event Type dropdown is empty. But terms DO exist in the correct vocabulary.
 
 ### Root Cause
-Open Social ships with the `taxonomy_access_fix` module, which overrides Drupal's default entity reference selection handler with `Drupal\taxonomy_access_fix\TermSelection`. This handler checks `$term->access('select')` per-term, which requires the `select terms in {vocabulary_name}` permission. Without it, the handler returns zero results.
+The `taxonomy_access_fix` module overrides Drupal's default entity reference selection handler with `Drupal\taxonomy_access_fix\TermSelection`. This handler checks `$term->access('select')` per-term, which requires the `select terms in {vocabulary_name}` permission. Without it, the handler returns zero results.
 
 ### Detection
 ```bash
 ddev drush php:eval '
 $handler = \Drupal::service("plugin.manager.entity_reference_selection")->getSelectionHandler(
-  \Drupal\node\Entity\Node::create(["type" => "event"])->getFieldDefinition("field_event_type")
+  \Drupal\node\Entity\Node::create(["type" => "your_content_type"])->getFieldDefinition("field_your_vocab_ref")
 );
 echo get_class($handler) . "\n";
 echo "Options: " . array_sum(array_map("count", $handler->getReferenceableEntities())) . "\n";
@@ -293,24 +287,21 @@ echo "Options: " . array_sum(array_map("count", $handler->getReferenceableEntiti
 If handler is `TermSelection` and count is 0, this is the issue.
 
 ### Solution
-Grant the permission:
+Grant the permission (replace `your_vocab_name` with the actual vocabulary machine name):
 ```bash
-ddev drush role:perm:add authenticated "select terms in event_types"
-ddev drush role:perm:add administrator "select terms in event_types"
+ddev drush role:perm:add authenticated "select terms in your_vocab_name"
+ddev drush role:perm:add administrator "select terms in your_vocab_name"
 ```
 
 ### Prevention
-- BUILD_LOG Step 170 now includes these permission grants with a `[!CAUTION]` block
 - After creating taxonomy terms, always verify they appear in form selects
 
 ---
 
 ## 10. PHP Opcode Cache Stale Class
 
-*Discovered in session 85f9e13e*
-
 ### Symptom
-The web process throws "class not found" errors (e.g., `WikiLinkFilter`) even though CLI (`ddev drush`) can see the class just fine. The module is installed, the file exists, but the web server can't find it.
+The web process throws "class not found" errors even though CLI (`ddev drush`) can see the class just fine. The module is installed, the file exists, but the web server can't find it.
 
 ### Root Cause
 PHP's opcode cache (`opcache`) caches compiled bytecode in memory. When a module's PHP files are added or modified while the web server is running, the opcache may still serve the old (or absent) bytecode. CLI uses a separate opcache instance, so it works fine.
@@ -333,13 +324,11 @@ This flushes the PHP opcode cache by restarting the web container.
 
 ## 11. Duplicate DDEV Project Port Conflicts
 
-*Discovered in session fe852bf3*
-
 ### Symptom
-Tests get random failures, unexpected responses, or the wrong site content. A test pointed at `pl-opensocial-rework` may unexpectedly see content from `pl-opensocial`.
+Tests get random failures, unexpected responses, or the wrong site content. A test pointed at one DDEV project may unexpectedly see content from a different project.
 
 ### Root Cause
-Two DDEV projects (e.g., `pl-opensocial` and `pl-opensocial-rework`) running simultaneously can conflict on ports or cause the DDEV router to misdirect traffic, especially if they were configured with similar domain patterns.
+Two DDEV projects running simultaneously can conflict on ports or cause the DDEV router to misdirect traffic, especially if they were configured with similar domain patterns.
 
 ### Detection
 ```bash
@@ -353,7 +342,7 @@ docker ps --format "{{.Names}} {{.Ports}}" | grep ddev
 ### Solution
 Stop the project you're not using:
 ```bash
-cd ~/Sites/pl-opensocial && ddev stop
+cd /path/to/other-project && ddev stop
 ```
 
 ### Prevention
@@ -363,8 +352,6 @@ cd ~/Sites/pl-opensocial && ddev stop
 ---
 
 ## 12. `pkill -f "playwright"` Self-Kill Bug
-
-*Discovered in session 85f9e13e*
 
 ### Symptom
 Running `pkill -f "playwright"` to clean up zombie processes kills its own parent shell. The cleanup command appears to hang or the terminal closes unexpectedly.
@@ -394,63 +381,58 @@ pkill -f "node.*playwright"
 
 ## 13. Nested DDEV Project Error
 
-*Discovered in session b61df279*
-
 ### Symptom
 `ddev start` fails with a "nested project" error, or DDEV behaves unpredictably. Configs from a parent directory's `.ddev/` folder interfere with the project's own DDEV configuration.
 
 ### Root Cause
-An accidental `.ddev/` folder exists in a parent directory (e.g., `~/Sites/.ddev/`). DDEV walks up the directory tree looking for project configuration and finds this stray folder, causing a "nested project" conflict or configuration confusion.
+An accidental `.ddev/` folder exists in a parent directory (e.g., in `~/Sites/` or another ancestor). DDEV walks up the directory tree looking for project configuration and finds this stray folder, causing a "nested project" conflict or configuration confusion.
 
 ### Detection
 ```bash
 # Check for stray .ddev folders above the project
-ls -la ~/Sites/.ddev 2>/dev/null && echo "FOUND — remove this"
-ls -la ~/../.ddev 2>/dev/null && echo "FOUND — remove this"
+ls -la "$(dirname $(pwd))"/.ddev 2>/dev/null && echo "FOUND — remove this"
 ```
 
 ### Solution
-Remove the stray `.ddev` folder:
+Remove the stray `.ddev` folder from the parent directory:
 ```bash
-rm -rf ~/Sites/.ddev
+rm -rf /path/to/parent/.ddev
 ```
 
 ### Prevention
-- Never run `ddev config` from `~/Sites/` directly
+- Never run `ddev config` from a shared parent directory like `~/Sites/`
 - If you see a "nested project" error, check parent directories for `.ddev/`
 
 ---
 
 ## 14. Custom Module Stale Registry (Flat Copy)
 
-*Discovered in session 85f9e13e*
-
 ### Symptom
-A custom module (e.g., `pl_opensocial_wiki`) is installed and the files exist in `web/modules/custom/`, but Drupal can't find it or reports "module not found" errors. The module was previously working.
+A custom module is installed and the files exist in `web/modules/custom/`, but Drupal can't find it or reports "module not found" errors. The module was previously working.
 
 ### Root Cause
-The module files were copied flat into `web/modules/custom/` (e.g., files like `pl_opensocial_wiki.info.yml` directly in `custom/`) instead of inside a proper subdirectory (`custom/pl_opensocial_wiki/pl_opensocial_wiki.info.yml`). Alternatively, the module was moved or renamed after being enabled, and Drupal's extension discovery cache still points to the old location.
+The module files were copied flat into `web/modules/custom/` (e.g., the `.info.yml` directly in `custom/`) instead of inside a proper subdirectory (`custom/my_module/my_module.info.yml`). Alternatively, the module was moved or renamed after being enabled, and Drupal's extension discovery cache still points to the old location.
 
 ### Detection
 ```bash
 # Verify directory structure
-ls web/modules/custom/pl_opensocial_wiki/
-# Should contain: pl_opensocial_wiki.info.yml, src/, etc.
+ls web/modules/custom/my_module/
+# Should contain: my_module.info.yml, src/, etc.
 
 # If info.yml is directly in custom/ — that's the problem
 ls web/modules/custom/*.info.yml
 ```
 
 ### Solution
-1. Uninstall the module: `ddev drush pmu pl_opensocial_wiki -y`
+1. Uninstall the module: `ddev drush pmu my_module -y`
 2. Remove the incorrectly placed files
 3. Re-copy with correct structure:
    ```bash
-   cp -r ~/Sites/pl-opensocial/web/modules/custom/pl_opensocial_wiki \
-         ~/Sites/pl-opensocial-rework/web/modules/custom/pl_opensocial_wiki
+   cp -r /path/to/source/web/modules/custom/my_module \
+         /path/to/dest/web/modules/custom/my_module
    ```
 4. Clear cache: `ddev drush cr`
-5. Re-enable: `ddev drush en pl_opensocial_wiki -y`
+5. Re-enable: `ddev drush en my_module -y`
 6. Restart to flush opcache: `ddev restart`
 
 ### Prevention
@@ -461,8 +443,6 @@ ls web/modules/custom/*.info.yml
 ---
 
 ## 21. Agent Approval Gate (False Hang)
-
-*Discovered in session d401c580*
 
 ### Symptom
 A command appears to hang indefinitely — no output, no error, no progress. It looks exactly like a stuck process, but the command never actually started. The terminal just sits there.
@@ -502,8 +482,6 @@ These commands are safe and should never wait for approval:
 
 ## 15. WSOD from Missing Field Storage
 
-*Discovered in session e86dfac3*
-
 ### Symptom
 White Screen of Death (WSOD) or a PHP fatal error immediately after importing a field configuration. The site becomes completely inaccessible via web browser. Drush commands may also fail.
 
@@ -538,8 +516,6 @@ echo "Storage updates applied.\n";
 
 ## 16. Markdown Filter Escaping HTML
 
-*Discovered in session e86dfac3*
-
 ### Symptom
 Content with `<strong>`, `<a>`, or other HTML tags displays the raw HTML as text instead of rendering it. For example, `<strong>bold</strong>` shows as literal text on the page. Tests checking for rendered HTML fail.
 
@@ -573,85 +549,77 @@ echo "Markdown filter disabled in full_html.\n";
 ```
 
 ### Prevention
-- The BUILD_LOG Step 186 notes that the markdown filter should be disabled in `full_html`
-- Markdown and CKEditor are fundamentally incompatible — don't use both on the same text format
+- Markdown and CKEditor are fundamentally incompatible — don't enable both on the same text format
 
 ---
 
-## 17. Missing Enrollment Sub-Modules
-
-*Discovered in session e86dfac3*
+## 17. Missing Feature Sub-Modules
 
 ### Symptom
-The "Enroll" button is missing from event pages, or clicking it returns a 403 Forbidden error. Tests checking for enrollment functionality fail.
+A feature button or action is missing from pages, or clicking it returns a 403 Forbidden error. Tests checking for that functionality fail.
 
 ### Root Cause
-Open Social's enrollment feature requires specific sub-modules that are not enabled by default:
-- `social_event_an_enroll` — enables anonymous enrollment
-- `social_event_max_enroll` — enables max enrollment limits
-
-Additionally, the `authenticated` and `anonymous` roles need explicit enrollment permissions.
+Some Drupal distribution features are split across sub-modules that are not enabled by default. The required sub-module must be explicitly enabled, and the relevant roles need explicit permissions granted.
 
 ### Detection
 ```bash
-# Check if enrollment modules are enabled
-ddev drush pm:list --status=enabled | grep enroll
+# Check if the required module is enabled
+ddev drush pm:list --status=enabled | grep my_feature_module
 
-# Check enrollment permissions
-ddev drush role:perm:list authenticated | grep enroll
+# Check relevant permissions
+ddev drush role:perm:list authenticated | grep "feature keyword"
 ```
 
 ### Solution
 ```bash
-ddev drush en social_event_an_enroll social_event_max_enroll -y
-ddev drush role:perm:add authenticated "add event enrollment entities"
-ddev drush role:perm:add authenticated "view event enrollment entities"
-ddev drush role:perm:add anonymous "add event enrollment entities"
+# Enable required sub-modules
+ddev drush en my_feature_module my_feature_submodule -y
+
+# Grant required permissions
+ddev drush role:perm:add authenticated "required permission string"
+ddev drush role:perm:add anonymous "required permission string"
 ```
 
 ### Prevention
-- BUILD_LOG Phase 1/2 include these module enables and permission grants
-- Always verify enrollment UI after enabling event modules
+- Always verify the feature UI after enabling modules
+- Check module README or install hooks for required companion modules and permissions
 
 ---
 
 ## 18. Missing Frontend Libraries
 
-*Discovered in session e86dfac3*
-
 ### Symptom
 JavaScript errors in the browser console. UI animations don't work. Buttons may appear unstyled. PHP warnings about missing `file_get_contents` for library files.
 
 ### Root Cause
-Some libraries required by Open Social (e.g., `node-waves`, `autosize`) are not installed by Composer by default or are expected in `web/libraries/` but are missing.
+Some libraries required by the Drupal project are not installed by Composer by default or are expected in `web/libraries/` but are missing.
 
 ### Detection
 ```bash
-# Check for missing libraries
-ls web/libraries/node-waves 2>/dev/null || echo "MISSING: node-waves"
-ls web/libraries/autosize 2>/dev/null || echo "MISSING: autosize"
+# Check for a missing library (replace with actual library name)
+ls web/libraries/my-library 2>/dev/null || echo "MISSING: my-library"
 
 # Check PHP warnings in DDEV logs
 ddev logs -s web | grep "file_get_contents.*libraries"
 ```
 
 ### Solution
-Copy libraries from the source project:
+Install via Composer (preferred):
 ```bash
-cp -r ~/Sites/pl-opensocial/web/libraries/node-waves ~/Sites/pl-opensocial-rework/web/libraries/
-cp -r ~/Sites/pl-opensocial/web/libraries/autosize ~/Sites/pl-opensocial-rework/web/libraries/
+composer require oomphinc/composer-installers-extender
 ```
-Or install via Composer if the source project uses asset-packagist.
+Or copy from a working environment:
+```bash
+cp -r /path/to/source/web/libraries/my-library /path/to/dest/web/libraries/
+```
 
 ### Prevention
-- The BUILD_LOG includes steps to restore missing libraries
 - After `composer install`, verify `web/libraries/` contains all expected packages
+- Add missing libraries to `composer.json` so they install automatically
 
 ---
 
 ## 19. DDEV `stop` Flag Confusion
-
-*Discovered in session b61df279*
 
 ### Symptom
 Running `ddev stop -y` or `ddev stop -p projectname` fails with unexpected errors. The DDEV project doesn't stop.
@@ -679,8 +647,6 @@ ddev delete --omit-snapshot -y
 
 ## 20. DDEV Port Variability
 
-*Discovered in session b61df279*
-
 ### Symptom
 Tests fail with "connection refused" or connect to the wrong site. The `playwright.config.ts` has a `baseURL` with a port that doesn't match the actual DDEV project.
 
@@ -696,14 +662,16 @@ ddev describe | grep -i url
 ### Solution
 Update `playwright.config.ts` to match the actual DDEV port:
 ```typescript
-// Check ddev describe output and use the correct port
-baseURL: 'https://pl-opensocial-rework.ddev.site:8493'
+// Check `ddev describe` output and use the correct port
+baseURL: 'https://your-project.ddev.site:ACTUAL_PORT'
 ```
 
 ### Prevention
 - Always run `ddev describe` before configuring test URLs
-- The BUILD_LOG includes the correct port, but verify it matches your environment
-- Store the URL in an environment variable to avoid hardcoding
+- Store the URL in an environment variable to avoid hardcoding:
+  ```bash
+  export PLAYWRIGHT_BASE_URL=$(ddev describe -j | jq -r '.raw.primary_url')
+  ```
 
 ---
 
@@ -713,12 +681,12 @@ baseURL: 'https://pl-opensocial-rework.ddev.site:8493'
 A test assertion like `a:has-text("Enroll")` resolves to a hidden admin toolbar element instead of the visible page content. Test fails with "Expected: visible / Received: hidden".
 
 ### Root Cause
-Open Social's admin toolbar contains links to configuration pages (e.g., "Event enrollment settings") that match broad locators. The toolbar elements are technically in the DOM but are hidden or positioned off-screen.
+Drupal's admin toolbar contains links to configuration pages that can match broad locators. The toolbar elements are technically in the DOM but are hidden or positioned off-screen.
 
 ### Detection
 The Playwright error log shows "locator resolved to" followed by an admin toolbar element:
 ```
-locator resolved to <a href="/admin/config/opensocial/event" ...>Event enrollment settings</a>
+locator resolved to <a href="/admin/config/..." ...>Admin Link Text</a>
 ```
 
 ### Solution
@@ -732,8 +700,7 @@ page.locator('main a:has-text("Enroll")').first()
 ```
 
 ### Prevention
-- All test locators in `phase1-content-types.spec.ts` should be scoped to `main`
-- The BUILD_LOG includes an `[!IMPORTANT]` block about this
+- All test locators should be scoped to `main` to avoid admin toolbar collisions
 
 ---
 
@@ -763,7 +730,6 @@ ddev drush php:eval '...'
 ```
 
 ### Prevention
-- BUILD_LOG Steps 145 and 205 import Event and Page form display configs
 - Always verify form fields appear after config imports
 
 ---
@@ -774,29 +740,29 @@ ddev drush php:eval '...'
 Playwright E2E tests interact with UI elements and successfully run, but recent changes applied to the source code (e.g., `.ts`, `.vue`) seem perfectly invisible. Diagnostic `console.log` statements added to the code do not appear in the test output.
 
 ### Root Cause
-The Playwright tests run against the production-like reverse proxy (e.g., `https://cloud.opencloud.test`), which serves pre-built, static bundles of the application from a mounted volume or server app directory. If the application is not actively rebuilt via `make build` / `pnpm build` and the resulting `dist/` directory is not physically copied over to the server's extension mount directory (e.g., `pl-opencloud-server/config/opencloud/apps/...`), the proxy permanently serves the old JavaScript bundle. The tests run against zombie code.
+The Playwright tests run against a production-like reverse proxy or static server, which serves pre-built, static bundles of the application. If the application is not actively rebuilt (e.g., via `make build` / `pnpm build`) and the resulting `dist/` directory is not copied to where the proxy serves it, the proxy permanently serves the old JavaScript bundle. The tests run against zombie code.
 
 ### Detection
 - Code modifications (e.g., adding an obvious UI element or `data-testid`) do not show up during the test.
 - The `make dev` watcher is active, but Playwright is targeting a non-localhost `baseURL` that is completely disconnected from Vite's Hot Module Replacement (HMR).
 
 ### Solution
-1. Completely rebuild the frontend application: `pnpm build`
-2. Copy the resulting static assets directly into the reverse proxy's application directory:
+1. Completely rebuild the frontend application: `pnpm build` (or `npm run build`)
+2. Copy the resulting static assets to wherever the proxy serves them:
    ```bash
-   cp -r dist/* ../../pl-opencloud-server/config/opencloud/apps/your-extension/
+   cp -r dist/* /path/to/proxy/served/directory/
    ```
 3. Clear the browser cache or start a new in-memory context (Playwright does this natively).
 
 ### Prevention
-- Never assume Vite dev server (HMR) dictates what the E2E framework sees if `baseURL` points to the primary `.test` local domain.
-- Create a `make build-and-deploy` command or incorporate the `cp` operation natively into the test pipeline's global setup.
+- Never assume Vite dev server (HMR) dictates what the E2E framework sees when `baseURL` points to a non-localhost domain.
+- Create a `make build-and-deploy` command or incorporate the copy step into the test pipeline's global setup.
 
 ---
 
 ## 23. Subtree Synchronization Failures (Missing Files)
 
-*Discovered in session cfb93ae7*
+
 
 ### Symptom
 When a Git Subtree is pulled into a host repository (e.g., via `ai:sync` or `git subtree pull`), the operation completes successfully without error, but recently created or modified files are conspicuously missing from the subtree directory.
@@ -825,8 +791,6 @@ Git subtrees inherently fetch their payloads from the remote upstream repository
 
 ## 24. AI Agent Hung on `git` Commands (Git Pager)
 
-*Discovered in session cfb93ae7*
-
 ### Symptom
 An AI agent attempts to run a terminal command like `git log`, `git show`, or `git diff` and appears to hang indefinitely. It never processes the output and requires you to manually intervene and cancel the running process. 
 
@@ -854,8 +818,6 @@ By default, Git pipes any output stream exceeding one screen height through a te
 
 ## 25. Multi-Repo Scripts Appearing Stuck (Execution Duration)
 
-*Discovered in session cfb93ae7*
-
 ### Symptom
 An AI agent executes a bash `for` loop that iterates over multiple repositories (e.g., synchronizing the AI subtree across 7 local projects). The command execution timer ticks for 30-45 seconds, making the system look completely frozen, identical to a `git log` pager hang.
 
@@ -873,7 +835,7 @@ Allow the agent's command to peacefully finish its network queue. If you acciden
 If the automated sync loop is ever disrupted, here is the official recovery snippet to cleanly rebuild the staged AI constraints across all host projects identically:
 
 ```bash
-REPOS=( ~/Sites/opencloud-voting ~/Sites/opencloud-registration ~/Sites/pl-opencloud-server ~/Sites/pl-opensocial ~/Sites/pl-opensocial-test ~/Sites/pl-drupalorg ~/Projects/AlmondTTS )
+REPOS=( ~/Sites/project-a ~/Sites/project-b ~/Projects/project-c )
 for repo in "${REPOS[@]}"; do
   cd "$repo"
   # Safely wipe uncommitted staged ghosts
@@ -887,15 +849,64 @@ done
 
 ---
 
-## Master Cleanup Script
+## 26. `ddev drush php:eval` Silent Hang on Entity `save()`
 
-The `scripts/kill-zombies.sh` script handles process cleanup. Run it:
+### Symptom
+A `ddev drush php:eval` command that calls `->save()` on a Drupal entity (e.g., `EntityFormDisplay`, `EntityViewDisplay`, `NodeType`) hangs indefinitely with no output. The terminal timer ticks past 10 minutes with no result or error.
 
+### Root Cause
+Drupal's entity `save()` method fires a cascade of hooks — cache invalidation, config sync listeners, event subscribers, and schema updates. Inside a DDEV container under certain conditions (recent container start, pending schema updates, or heavy hook load), one of these hooks can deadlock or exceed PHP's internal memory/time thresholds silently. Drush does not surface the error; it simply never returns.
+
+This is distinct from a PHP fatal being logged to `ddev logs -s web` — the process may be alive but permanently blocked inside a hook.
+
+### Detection
 ```bash
-bash ~/Sites/pl-opensocial/scripts/kill-zombies.sh
+# At the 10-second mark with no output, check web logs:
+ddev logs -s web | tail -20
+
+# Check if PHP is still processing:
+ddev exec ps aux | grep php
 ```
 
-It checks and kills:
+If PHP shows CPU usage but no log output, it is blocked in a hook. If there is no PHP process, it crashed silently.
+
+### Solution
+1. `Ctrl+C` the stuck command immediately (apply the 10-second rule from Issue #4)
+2. Use **config YAML import** instead of `php:eval` to create entity displays:
+
+```bash
+# Write the display config as a YAML file, then:
+ddev drush config:import --partial --source=/var/www/html/path/to/yaml/dir --yes
+```
+
+This is reliable because it uses Drupal's own config management pipeline rather than triggering hooks via PHP eval.
+
+### Prevention
+- **Never use `ddev drush php:eval` to call `->save()` on entity displays** (`EntityFormDisplay`, `EntityViewDisplay`). Use `config:import --partial --yes` with YAML files instead.
+- Apply the **10-second rule** (Issue #4): if `ddev drush` shows nothing for 10 seconds, check `ddev logs -s web` immediately — do not wait.
+- For other entity types where `php:eval` is needed (e.g., creating nodes, terms, roles), short operations are fine. The hook cascade is heaviest for config entities like displays.
+
+### Commands That Should Use Config Import Instead of `php:eval`
+| Entity | Use config:import | Why |
+|--------|-------------------|-----|
+| `EntityFormDisplay` | ✅ Yes | Triggers heavy cache + layout hooks |
+| `EntityViewDisplay` | ✅ Yes | Triggers heavy cache + layout hooks |
+| `NodeType` (content type) | ⚠️ Caution | Can use `php:eval` but test on 10-second rule |
+| `FieldStorageConfig` | ✅ Prefer import | Schema updates can deadlock |
+| Taxonomy terms | ✅ Fine with `php:eval` | Lightweight, hooks are fast |
+| Roles / permissions | ✅ Fine with drush commands | `drush role:create`, `role:perm:add` |
+
+---
+
+## Master Cleanup Script
+
+If your project includes a process cleanup script (e.g., `scripts/kill-zombies.sh`), run it before every test phase:
+
+```bash
+bash /path/to/your/project/scripts/kill-zombies.sh
+```
+
+A cleanup script typically kills:
 - Orphan Playwright (`node`) processes
 - Orphan Chromium browsers
 - Orphan Drush processes (host-side)
@@ -904,7 +915,7 @@ It checks and kills:
 - Node dev servers
 - Orphan curl/wget processes
 
-It also reports DDEV container health status.
+It may also report DDEV container health status.
 
 **Run this script before every test phase.**
 
@@ -916,9 +927,9 @@ When something appears stuck, check in this order:
 
 ### Environment
 1. **Is DDEV running?** → `ddev describe`
-2. **Are there zombie processes?** → `bash ~/Sites/pl-opensocial/scripts/kill-zombies.sh`
+2. **Are there zombie processes?** → Run your project's cleanup script (e.g., `bash scripts/kill-zombies.sh`)
 3. **Is another DDEV project interfering?** → `ddev list` and stop unused projects
-4. **Is there a nested `.ddev` in a parent directory?** → `ls ~/Sites/.ddev`
+4. **Is there a nested `.ddev` in a parent directory?** → `ls "$(dirname $(pwd))"/.ddev`
 5. **Is the DDEV port correct?** → `ddev describe` and compare with `playwright.config.ts`
 
 ### Playwright / Testing
@@ -929,19 +940,20 @@ When something appears stuck, check in this order:
 
 ### Drupal Configuration
 10. **Is PHP opcache stale?** → `ddev restart` (not just `ddev drush cr`)
-11. **Are taxonomy terms in the right vocabulary?** → Check `vid` matches actual name (`event_types` plural)
+11. **Are taxonomy terms in the right vocabulary?** → Check `vid` matches the actual vocabulary machine name
 12. **Are form display configs imported?** → Check `entity_form_display` components
 13. **Are `taxonomy_access_fix` permissions granted?** → Check `select terms in {vocab}`
 14. **Is the markdown filter escaping HTML?** → Disable markdown in `full_html`
-15. **Are enrollment sub-modules enabled?** → Check for `social_event_an_enroll`
+15. **Are required sub-modules enabled?** → Check for companion modules and their permissions
 16. **Did a config import cause WSOD?** → Check `ddev logs -s web` for SQL errors
 
 ### Module / Library Issues
 17. **Is the custom module in a proper subdirectory?** → Check `web/modules/custom/module_name/`
-18. **Are frontend libraries present?** → Check `web/libraries/` for `node-waves`, `autosize`
+18. **Are frontend libraries present?** → Check `web/libraries/` for expected library directories
 
 ### DDEV CLI
 19. **Using wrong DDEV flags?** → `ddev stop` has no `-y`, use `ddev delete --omit-snapshot -y`
+20. **`ddev drush php:eval` with `->save()` hanging?** → Cancel at 10s, check `ddev logs -s web`, use `ddev drush config:import --partial --yes` instead (Issue #26)
 
 ### Git Environments
 20. **Subtree fetch missing recent files?** → Verify the source repository has been explicitly committed and pushed to the remote origin.
