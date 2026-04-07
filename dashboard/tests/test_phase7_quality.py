@@ -69,7 +69,7 @@ def test_unexpected_search_error_is_handled_without_500_template_crash(monkeypat
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Search backend unavailable" in response.text
+    assert "temporarily unavailable" in response.text.lower()
 
 
 def test_query_param_validation_rules():

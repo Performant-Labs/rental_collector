@@ -243,8 +243,13 @@ def _run_search(
             validation_issues=validation_issues,
             error_message="Search temporarily unavailable. Please retry.",
         )
-    except Exception:
+    except Exception as e:
         logger.exception("search_unexpected_error request_id=%s", getattr(request.state, "request_id", ""))
+        error_str = str(e)
+        if "404" in error_str and ("index" in error_str.lower() or "not found" in error_str.lower()):
+            friendly_message = "Search index not found. Run ingestion first with: docker compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner"
+        else:
+            friendly_message = "Search temporarily unavailable. Please retry later."
         return _fallback_search_payload(
             request=request,
             query=safe_q,
@@ -253,7 +258,7 @@ def _run_search(
             per_page=safe_per_page,
             facet_filters=facet_filters,
             validation_issues=validation_issues,
-            error_message="Search backend unavailable. Showing safe fallback state.",
+            error_message=friendly_message,
         )
 
 

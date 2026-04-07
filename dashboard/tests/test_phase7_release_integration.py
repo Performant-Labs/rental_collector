@@ -43,16 +43,17 @@ def _payload(query="", error_message=""):
 def test_search_error_ui_and_api_fallback_behavior(monkeypatch):
     monkeypatch.setattr(
         "dashboard.app.main._run_search",
-        lambda request, **kwargs: _payload(error_message="Search backend unavailable. Showing safe fallback state."),
+        lambda request, **kwargs: _payload(error_message="Search index not found. Run ingestion first with: docker compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner"),
     )
 
     ui_response = client.get("/partials/search")
     api_response = client.get("/api/search")
 
     assert ui_response.status_code == 200
-    assert "Search backend unavailable" in ui_response.text
+    assert "Search index not found" in ui_response.text
+    assert "ingestion" in ui_response.text.lower()
     assert api_response.status_code == 200
-    assert "Search backend unavailable" in api_response.json()["error_message"]
+    assert "Search index not found" in api_response.json()["error_message"]
 
 
 def test_container_smoke_dashboard_and_meilisearch_health(monkeypatch):
