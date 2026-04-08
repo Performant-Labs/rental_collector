@@ -169,3 +169,72 @@ def test_idempotent_upsert_documents():
     assert merged[0]["title"] == "New Title"
     assert merged[1]["title"] == "Keep"
     assert merged[2]["title"] == "Added"
+
+
+def test_spanish_only_no_price_wa_listing_is_valid(tmp_path: Path):
+    """
+    A WhatsApp message in Spanish with no price must survive _is_valid_document()
+    when it contains strong Spanish rental keywords.
+    These were previously dropped before the fix.
+    """
+    spanish_phrases = [
+        ("En renta casita en Pescadero", "en renta"),
+        ("Casa en alquiler disponible ahora", "en alquiler"),
+        ("Se arrienda departamento bonito", "se arrienda"),
+        ("Casita disponible en Todos Santos", "casita"),
+        ("Depto de 2 recámaras en el centro", "recámara"),
+        ("Renta mensual de cuarto amueblado", "renta mensual"),
+    ]
+    for i, (title, phrase) in enumerate(spanish_phrases):
+        folder = _make_listing_folder(
+            tmp_path,
+            f"whatsapp-{i:02d}-spanish-noprice",
+            {
+                "title": title,
+                "source": "whatsapp",
+                "price_usd": None,
+                "description": f"Listing uses phrase: {phrase}",
+            },
+        )
+        raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+        document = normalise_listing_document(raw, folder)
+        from dashboard.app.ingestion import _is_valid_document
+        assert _is_valid_document(document), (
+            f"Spanish listing with '{phrase}' should be valid but was rejected"
+        )
+
+
+def test_unrelated_spanish_text_no_price_is_invalid(tmp_path: Path):
+    """A listing with Spanish text but no rental keywords and no price must be rejected."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "whatsapp-00-not-a-rental",
+        {
+            "title": "Se vende tabla de surf usada",
+            "source": "whatsapp",
+            "price_usd": None,
+            "description": "Buen estado, $200 firma",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    document = normalise_listing_document(raw, folder)
+    from dashboard.app.ingestion import _is_valid_document
+    assert not _is_valid_document(document)
+
+
+def test_whatsapp_listing_with_price_always_valid(tmp_path: Path):
+    """Any WA listing with a valid price passes regardless of language."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "whatsapp-01-has-price",
+        {
+            "title": "Tabla de surf",
+            "source": "whatsapp",
+            "price_usd": 500,
+            "description": "nothing rental-related in text",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    document = normalise_listing_document(raw, folder)
+    from dashboard.app.ingestion import _is_valid_document
+    assert _is_valid_document(document)
