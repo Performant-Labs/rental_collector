@@ -145,10 +145,10 @@ def parse_scheduler_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Lock file path to prevent overlapping runs",
     )
     parser.add_argument(
-        "--skip-wa-export",
+        "--skip-wa-import",
         action="store_true",
         default=False,
-        help="Skip the WhatsApp export conversion step",
+        help="Skip the WhatsApp import conversion step",
     )
     return parser.parse_args(argv)
 
