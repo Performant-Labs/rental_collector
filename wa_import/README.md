@@ -1,4 +1,4 @@
-# WhatsApp Export Pipeline (`wa_export/`)
+# WhatsApp Export Pipeline (`wa_import/`)
 
 This subfolder contains the WhatsApp message export and rental-detection pipeline, originally developed as a standalone project and brought into `Todos Santos Rentals` so its output can feed the canonical rental listing database.
 
@@ -28,14 +28,14 @@ The pipeline is a numbered sequence of scripts. Run them in order when you have 
 `ChatStorage.sqlite` is **not tracked in git** (it's ~100 MB). Place it alongside the scripts:
 
 ```
-wa_export/
+wa_import/
 └── ChatStorage.sqlite    ← copy here from your iOS backup / WAExport location
 ```
 
 Or symlink it:
 
 ```bash
-ln -s /path/to/your/ChatStorage.sqlite wa_export/ChatStorage.sqlite
+ln -s /path/to/your/ChatStorage.sqlite wa_import/ChatStorage.sqlite
 ```
 
 ### Python dependencies
@@ -47,7 +47,7 @@ pip install better-sqlite3    # only for Node scripts; Python scripts use stdlib
 ### Node dependencies (for steps 3+)
 
 ```bash
-cd wa_export
+cd wa_import
 npm install
 ```
 
@@ -57,46 +57,46 @@ npm install
 
 ```bash
 # Step 1 — export messages
-python3 wa_export/1_export_messages.py
+python3 wa_import/1_export_messages.py
 
 # Step 2 — download media
-python3 wa_export/2_download_media.py
+python3 wa_import/2_download_media.py
 
 # Step 4 — score messages, find rentals
-python3 wa_export/4_find_rentals.py
+python3 wa_import/4_find_rentals.py
 
 # Convert to canonical rental listings and push into rentals/
-python3 wa_export/convert_to_rentals.py --diff
+python3 wa_import/convert_to_rentals.py --diff
 ```
 
 ---
 
 ## Pushing results into the main listing database
 
-`convert_to_rentals.py` reads `wa_export/output/rentals.json` and writes:
+`convert_to_rentals.py` reads `wa_import/output/rentals.json` and writes:
 
 - **`rentals/whatsapp-YYYY-MM-DD.json`** — dated summary JSON in the canonical rental schema
 - **`rentals/whatsapp-NN-slug-Nusd/`** — one folder per unique listing, with `info.json`, `listing.html`, and any copied media photos
 
 ```bash
 # Dry run — print report only
-python3 wa_export/convert_to_rentals.py
+python3 wa_import/convert_to_rentals.py
 
 # Save output
-python3 wa_export/convert_to_rentals.py --save
+python3 wa_import/convert_to_rentals.py --save
 
 # Save + see what's new vs. the last run
-python3 wa_export/convert_to_rentals.py --diff
+python3 wa_import/convert_to_rentals.py --diff
 
 # Raise the minimum rental-confidence score
-python3 wa_export/convert_to_rentals.py --diff --min-score 20
+python3 wa_import/convert_to_rentals.py --diff --min-score 20
 ```
 
 ---
 
 ## What's gitignored
 
-Large files are excluded from git — see `wa_export/.gitignore`:
+Large files are excluded from git — see `wa_import/.gitignore`:
 
 ```
 ChatStorage.sqlite   output/   Media/   node_modules/
@@ -107,7 +107,7 @@ ChatStorage.sqlite   output/   Media/   node_modules/
 
 ## Production Server Setup
 
-The `wa_export/output/` directory is **not in git**. On every machine (local or prod) you must make it available before the ingestion pipeline can pick up WhatsApp listings.
+The `wa_import/output/` directory is **not in git**. On every machine (local or prod) you must make it available before the ingestion pipeline can pick up WhatsApp listings.
 
 ### Option A — Symlink to existing data (recommended)
 
@@ -115,19 +115,19 @@ If your raw WAExport data lives elsewhere on the machine, create a symlink:
 
 ```bash
 # From the project root:
-ln -s /path/to/your/WAExport/output wa_export/output
+ln -s /path/to/your/WAExport/output wa_import/output
 
 # Verify:
-ls -la wa_export/output/     # should show messages.json, rentals.json, media/
+ls -la wa_import/output/     # should show messages.json, rentals.json, media/
 ```
 
 ### Option B — Create the directory and copy data
 
 ```bash
-mkdir -p wa_export/output
-cp /path/to/WAExport/output/messages.json wa_export/output/
-cp /path/to/WAExport/output/rentals.json  wa_export/output/    # optional; will be regenerated
-cp -r /path/to/WAExport/output/media      wa_export/output/    # optional; for photo copying
+mkdir -p wa_import/output
+cp /path/to/WAExport/output/messages.json wa_import/output/
+cp /path/to/WAExport/output/rentals.json  wa_import/output/    # optional; will be regenerated
+cp -r /path/to/WAExport/output/media      wa_import/output/    # optional; for photo copying
 ```
 
 ### Automated ingestion

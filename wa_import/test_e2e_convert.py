@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 4: End-to-end tests for wa_export/convert_to_rentals.py
+Phase 4: End-to-end tests for wa_import/convert_to_rentals.py
 
 Runs the complete pipeline against a small fixture file and validates
 all output on disk.  No network access, no real data files required.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for wa_export/convert_to_rentals.py
+Tests for wa_import/convert_to_rentals.py
 
 Phase 1: Constants and scaffold
 Phase 2: Dedup, field mapping, save/diff
@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-# Module is in the same directory; tests are run from the project root or wa_export/
+# Module is in the same directory; tests are run from the project root or wa_import/
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -35,9 +35,9 @@ class TestConstants(unittest.TestCase):
         """Must match rental_search.py's MAX_USD so filters are consistent."""
         self.assertEqual(cr.MAX_USD, 2000)
 
-    def test_wa_rentals_path_is_under_wa_export(self):
-        """Input rentals.json must be inside wa_export/output/."""
-        self.assertIn("wa_export", str(cr.WA_RENTALS_PATH))
+    def test_wa_rentals_path_is_under_wa_import(self):
+        """Input rentals.json must be inside wa_import/output/."""
+        self.assertIn("wa_import", str(cr.WA_RENTALS_PATH))
         self.assertTrue(str(cr.WA_RENTALS_PATH).endswith("rentals.json"))
 
     def test_results_dir_points_to_rentals_folder(self):

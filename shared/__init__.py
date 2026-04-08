@@ -1,1 +1,1 @@
-# shared/ — Canonical utilities shared across scraper, wa_export, and dashboard.
+# shared/ — Canonical utilities shared across scraper, wa_import, and dashboard.

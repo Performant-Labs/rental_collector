@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 # Paths to the WhatsApp pipeline scripts, relative to the repo root
 from shared.config import REPO_ROOT as _REPO_ROOT
-_WA_DIR       = _REPO_ROOT / "wa_export"
+_WA_DIR       = _REPO_ROOT / "wa_import"
 _WA_SCORER    = _WA_DIR / "4_find_rentals.py"    # messages.json → rentals.json
 _WA_CONVERTER = _WA_DIR / "convert_to_rentals.py" # rentals.json  → rentals/ folders
 _WA_MIN_SCORE = int(os.environ.get("WA_MIN_SCORE", "15"))
@@ -26,7 +26,7 @@ _WA_MIN_SCORE = int(os.environ.get("WA_MIN_SCORE", "15"))
 
 def run_wa_scoring() -> bool:
     """
-    Run wa_export/4_find_rentals.py to produce output/rentals.json from
+    Run wa_import/4_find_rentals.py to produce output/rentals.json from
     output/messages.json.  Non-fatal; returns False if unavailable or failed.
 
     Prerequisite: output/messages.json must exist (produced by 1_export_messages.py
@@ -35,19 +35,19 @@ def run_wa_scoring() -> bool:
     cannot be automated here.
     """
     if not _WA_SCORER.exists():
-        logger.warning("wa_export: scorer not found at %s — skipping", _WA_SCORER)
+        logger.warning("wa_import: scorer not found at %s — skipping", _WA_SCORER)
         return False
 
     messages_json = _WA_DIR / "output" / "messages.json"
     if not messages_json.exists():
         logger.info(
-            "wa_export: %s not found — run 1_export_messages.py against ChatStorage.sqlite first",
+            "wa_import: %s not found — run 1_export_messages.py against ChatStorage.sqlite first",
             messages_json,
         )
         return False
 
     cmd = [sys.executable, str(_WA_SCORER)]
-    logger.info("wa_export: scoring messages — running %s", " ".join(cmd))
+    logger.info("wa_import: scoring messages — running %s", " ".join(cmd))
     try:
         result = subprocess.run(
             cmd,
@@ -57,27 +57,27 @@ def run_wa_scoring() -> bool:
             cwd=str(_WA_DIR),
         )
         if result.stdout:
-            logger.info("wa_export scorer stdout:\n%s", result.stdout.strip())
+            logger.info("wa_import scorer stdout:\n%s", result.stdout.strip())
         if result.returncode != 0:
             logger.error(
-                "wa_export: scorer exited %d — stderr: %s",
+                "wa_import: scorer exited %d — stderr: %s",
                 result.returncode,
                 result.stderr.strip(),
             )
             return False
-        logger.info("wa_export: scoring complete")
+        logger.info("wa_import: scoring complete")
         return True
     except subprocess.TimeoutExpired:
-        logger.error("wa_export: scorer timed out after 300 s")
+        logger.error("wa_import: scorer timed out after 300 s")
         return False
     except Exception as exc:
-        logger.error("wa_export: unexpected error running scorer: %s", exc)
+        logger.error("wa_import: unexpected error running scorer: %s", exc)
         return False
 
 
-def run_wa_export_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
+def run_wa_import_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
     """
-    Run wa_export/convert_to_rentals.py --save before ingestion so that
+    Run wa_import/convert_to_rentals.py --save before ingestion so that
     WhatsApp listings are deposited into rentals/ and picked up by the
     Meilisearch indexer in the same run.
 
@@ -85,20 +85,20 @@ def run_wa_export_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
     produce it.  Returns True on success, False on any failure (non-fatal).
     """
     if not _WA_CONVERTER.exists():
-        logger.warning("wa_export: converter not found at %s — skipping", _WA_CONVERTER)
+        logger.warning("wa_import: converter not found at %s — skipping", _WA_CONVERTER)
         return False
 
     wa_rentals = _WA_DIR / "output" / "rentals.json"
     if not wa_rentals.exists():
-        logger.info("wa_export: rentals.json missing — running scorer first")
+        logger.info("wa_import: rentals.json missing — running scorer first")
         if not run_wa_scoring():
             return False
         if not wa_rentals.exists():
-            logger.error("wa_export: rentals.json still missing after scoring — aborting")
+            logger.error("wa_import: rentals.json still missing after scoring — aborting")
             return False
 
     cmd = [sys.executable, str(_WA_CONVERTER), "--save", "--min-score", str(min_score)]
-    logger.info("wa_export: running %s", " ".join(cmd))
+    logger.info("wa_import: running %s", " ".join(cmd))
     try:
         result = subprocess.run(
             cmd,
@@ -108,21 +108,21 @@ def run_wa_export_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
             cwd=str(_REPO_ROOT),
         )
         if result.stdout:
-            logger.info("wa_export stdout:\n%s", result.stdout.strip())
+            logger.info("wa_import stdout:\n%s", result.stdout.strip())
         if result.returncode != 0:
             logger.error(
-                "wa_export: converter exited %d — stderr: %s",
+                "wa_import: converter exited %d — stderr: %s",
                 result.returncode,
                 result.stderr.strip(),
             )
             return False
-        logger.info("wa_export: conversion complete")
+        logger.info("wa_import: conversion complete")
         return True
     except subprocess.TimeoutExpired:
-        logger.error("wa_export: converter timed out after 120 s")
+        logger.error("wa_import: converter timed out after 120 s")
         return False
     except Exception as exc:
-        logger.error("wa_export: unexpected error running converter: %s", exc)
+        logger.error("wa_import: unexpected error running converter: %s", exc)
         return False
 
 
@@ -175,18 +175,18 @@ def run_scheduled_ingest(
     rentals_dir: Path,
     lock_file: Path,
     client: Any | None = None,
-    skip_wa_export: bool = False,
+    skip_wa_import: bool = False,
 ) -> int:
     if not _acquire_lock(lock_file):
         return 2
 
     try:
         # Step 1: deposit WhatsApp listings into rentals/ before indexing
-        if not skip_wa_export:
+        if not skip_wa_import:
             try:
-                run_wa_export_conversion()
+                run_wa_import_conversion()
             except Exception as exc:
-                logger.error("wa_export: unexpected error during conversion (non-fatal): %s", exc)
+                logger.error("wa_import: unexpected error during conversion (non-fatal): %s", exc)
 
         # Step 2: index everything in rentals/ into Meilisearch
         index_client = client or MeilisearchIndexClient.from_env()
@@ -207,7 +207,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=args.mode,
         rentals_dir=Path(args.rentals_dir),
         lock_file=Path(args.lock_file),
-        skip_wa_export=args.skip_wa_export,
+        skip_wa_import=args.skip_wa_import,
     )
 
 

@@ -2,7 +2,7 @@
 shared.listing_html — Generate a self-contained HTML listing page.
 
 Moved here from scraper/rental_search.py so that both the scraper and
-wa_export/convert_to_rentals.py can produce identical listing pages
+wa_import/convert_to_rentals.py can produce identical listing pages
 without fragile sys.path hacks.
 """
 

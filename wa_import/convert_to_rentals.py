@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-wa_export/convert_to_rentals.py
+wa_import/convert_to_rentals.py
 ================================
-Converts wa_export/output/rentals.json (scored WhatsApp messages produced by
+Converts wa_import/output/rentals.json (scored WhatsApp messages produced by
 4_find_rentals.py) into the canonical rental listing schema used throughout
 the Todos Santos Rentals project.
 
 Usage:
-    python3 wa_export/convert_to_rentals.py               # print report only
-    python3 wa_export/convert_to_rentals.py --save        # write whatsapp-YYYY-MM-DD.json + folders
-    python3 wa_export/convert_to_rentals.py --diff        # --save + diff vs. last run
-    python3 wa_export/convert_to_rentals.py --min-score 20
+    python3 wa_import/convert_to_rentals.py               # print report only
+    python3 wa_import/convert_to_rentals.py --save        # write whatsapp-YYYY-MM-DD.json + folders
+    python3 wa_import/convert_to_rentals.py --diff        # --save + diff vs. last run
+    python3 wa_import/convert_to_rentals.py --min-score 20
 
 Canonical listing schema (all fields present in every output object):
     title        str
@@ -60,7 +60,7 @@ _listing_key = listing_key
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
-_HERE        = Path(__file__).parent                         # wa_export/
+_HERE        = Path(__file__).parent                         # wa_import/
 _PROJECT     = _HERE.parent                                  # Todos Santos Rentals/
 
 WA_RENTALS_PATH = _HERE / "output" / "rentals.json"

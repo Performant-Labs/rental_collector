@@ -1,5 +1,5 @@
 """
-wa_export/conftest.py — ensures the wa_export package dir is also on
+wa_import/conftest.py — ensures the wa_import package dir is also on
 sys.path so that `import convert_to_rentals` works when pytest is
 invoked from the project root.
 """

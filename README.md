@@ -130,28 +130,28 @@ Flags can be combined: `python3 scraper/rental_search.py --cli --diff`
 | Craigslist Baja Sur | Direct HTTP scrape |
 | TodosSantos.cc | Direct HTTP scrape (classifieds, housing, rentals pages) |
 | Claude web search | Claude API or CLI with `web_search` tool — hits Amy Rex, Facebook groups, local agencies, and anything else it can find |
-| **WhatsApp** | `wa_export/convert_to_rentals.py` — converts scored messages from the WhatsApp group pipeline |
+| **WhatsApp** | `wa_import/convert_to_rentals.py` — converts scored messages from the WhatsApp group pipeline |
 
 **Duplicate handling:** when a listing already has a folder on disk, it is skipped if the price is unchanged, or its `info.json` and `listing.html` are updated in place (photos preserved) if the price has changed.
 
 ---
 
-### `wa_export/convert_to_rentals.py` — push WhatsApp listings into `rentals/`
+### `wa_import/convert_to_rentals.py` — push WhatsApp listings into `rentals/`
 
-Reads `wa_export/output/rentals.json` (produced by `4_find_rentals.py`) and converts scored WhatsApp messages into canonical rental listings, deduplicating repeat posts and copying media into listing folders.
+Reads `wa_import/output/rentals.json` (produced by `4_find_rentals.py`) and converts scored WhatsApp messages into canonical rental listings, deduplicating repeat posts and copying media into listing folders.
 
 ```bash
 # Dry run — print report only
-python3 wa_export/convert_to_rentals.py
+python3 wa_import/convert_to_rentals.py
 
 # Save dated JSON + listing folders
-python3 wa_export/convert_to_rentals.py --save
+python3 wa_import/convert_to_rentals.py --save
 
 # Save + show what's new vs. the previous run
-python3 wa_export/convert_to_rentals.py --diff
+python3 wa_import/convert_to_rentals.py --diff
 
 # Raise the confidence bar (default is 15)
-python3 wa_export/convert_to_rentals.py --diff --min-score 20
+python3 wa_import/convert_to_rentals.py --diff --min-score 20
 ```
 
 ---
@@ -176,7 +176,7 @@ Todos Santos Rentals/
 │   ├── rental_search.py          # Main search + scrape script
 │   ├── download_photos.py        # Download Airbnb photos to local folders
 │   └── test_rental_search.py     # Unit tests
-├── wa_export/                     # WhatsApp message export pipeline
+├── wa_import/                     # WhatsApp message export pipeline
 │   ├── 1_export_messages.py      # Export from ChatStorage.sqlite → output/messages.json
 │   ├── 4_find_rentals.py         # Score messages → output/rentals.json
 │   ├── convert_to_rentals.py     # Convert WA rentals → canonical schema in rentals/

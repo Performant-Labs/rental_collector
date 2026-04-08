@@ -31,17 +31,17 @@ cd "$PROJECT_ROOT"
 log "Phase 1: Scraping listings (this will take a few minutes)..."
 python3 scraper/rental_search.py --local --save 2>&1 | tee -a "$LOG_FILE"
 
-# ── Phase 1.5: Score WhatsApp messages → wa_export/output/rentals.json ───────
+# ── Phase 1.5: Score WhatsApp messages → wa_import/output/rentals.json ───────
 # convert_to_rentals.py is called automatically inside ingest_runner, but
 # 4_find_rentals.py must produce rentals.json first.
 log "Phase 1.5: Scoring WhatsApp messages..."
-WA_MESSAGES="$PROJECT_ROOT/wa_export/output/messages.json"
+WA_MESSAGES="$PROJECT_ROOT/wa_import/output/messages.json"
 if [ -f "$WA_MESSAGES" ]; then
-    python3 wa_export/4_find_rentals.py 2>&1 | tee -a "$LOG_FILE"
+    python3 wa_import/4_find_rentals.py 2>&1 | tee -a "$LOG_FILE"
     log "  WhatsApp scoring complete."
 else
-    log "  wa_export/output/messages.json not found — skipping WA scoring."
-    log "  Run: python3 wa_export/1_export_messages.py  (requires ChatStorage.sqlite)"
+    log "  wa_import/output/messages.json not found — skipping WA scoring."
+    log "  Run: python3 wa_import/1_export_messages.py  (requires ChatStorage.sqlite)"
 fi
 
 # ── Phase 2: (removed) ──────────────────────────────────────────────────────
