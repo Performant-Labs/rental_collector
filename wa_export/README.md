@@ -102,3 +102,51 @@ Large files are excluded from git — see `wa_export/.gitignore`:
 ChatStorage.sqlite   output/   Media/   node_modules/
 .baileys_auth/       .playwright_session/
 ```
+
+---
+
+## Production Server Setup
+
+The `wa_export/output/` directory is **not in git**. On every machine (local or prod) you must make it available before the ingestion pipeline can pick up WhatsApp listings.
+
+### Option A — Symlink to existing data (recommended)
+
+If your raw WAExport data lives elsewhere on the machine, create a symlink:
+
+```bash
+# From the project root:
+ln -s /path/to/your/WAExport/output wa_export/output
+
+# Verify:
+ls -la wa_export/output/     # should show messages.json, rentals.json, media/
+```
+
+### Option B — Create the directory and copy data
+
+```bash
+mkdir -p wa_export/output
+cp /path/to/WAExport/output/messages.json wa_export/output/
+cp /path/to/WAExport/output/rentals.json  wa_export/output/    # optional; will be regenerated
+cp -r /path/to/WAExport/output/media      wa_export/output/    # optional; for photo copying
+```
+
+### Automated ingestion
+
+Once `output/messages.json` (and optionally `output/rentals.json`) is present, the daily update scripts handle everything automatically:
+
+| Script | Platform |
+|---|---|
+| `scripts/daily_update.sh` | Linux / macOS (prod server) |
+| `scripts/daily_update.ps1` | Windows (local dev) |
+
+Phase 1.5 in each script runs `4_find_rentals.py` to score messages and produce a fresh `output/rentals.json`. The `ingest_runner` then calls `convert_to_rentals.py --save` automatically as part of the Meilisearch indexing cycle.
+
+### Cron setup (prod server)
+
+```bash
+# Edit crontab:
+crontab -e
+
+# Add (runs daily at 03:00 AM):
+0 3 * * * /path/to/rental_collector/scripts/daily_update.sh >> /path/to/rental_collector/logs/cron.log 2>&1
+```
