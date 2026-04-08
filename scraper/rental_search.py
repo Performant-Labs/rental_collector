@@ -552,6 +552,12 @@ def merge_listings(all_lists: List[List[dict]]) -> List[dict]:
 # ── Report ────────────────────────────────────────────────────────────────────
 
 def print_report(listings: List[dict]):
+    # Ensure Unicode box-drawing chars print correctly on Windows
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     divider = "─" * 68
     print(f"\n{'═' * 68}")
     print(f"  TODOS SANTOS RENTALS  ·  {MIN_MONTHS}+ months  ·  under ${MAX_USD}/mo  ·  {TODAY}")

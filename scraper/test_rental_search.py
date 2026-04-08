@@ -19,7 +19,7 @@ class TestNormalise(unittest.TestCase):
         result = rs.normalise({}, "airbnb")
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped"}
+                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result.keys()), expected)
 
     def test_source_always_overwritten(self):
@@ -340,7 +340,7 @@ class TestParseClaudeOutput(unittest.TestCase):
         result = rs._parse_claude_output(json.dumps([self._raw_listing()]), "claude-api")
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped"}
+                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     def test_garbage_input_returns_empty(self):
@@ -496,7 +496,7 @@ class TestScrapeCreaigslist(unittest.TestCase):
         result = rs.scrape_craigslist()
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped"}
+                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     @patch("rental_search.get_soup")
@@ -580,7 +580,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         result = rs.scrape_todos_santos_cc()
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped"}
+                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     @patch("rental_search.get_soup")
@@ -677,7 +677,7 @@ class TestSaveAndDiff(unittest.TestCase):
         saved = json.loads(path.read_text())
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped"}
+                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(saved[0].keys()), expected)
 
     def test_diff_no_previous(self):
@@ -894,7 +894,8 @@ class TestSaveListingFolder(unittest.TestCase):
         data = json.loads((folder / "info.json").read_text())
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "localPhotos"}
+                    "listing_type", "checkin", "checkout", "scraped", "localPhotos",
+                    "photo_url"}
         self.assertEqual(set(data.keys()), expected)
 
     @patch("rental_search.fetch_photos", return_value=[])

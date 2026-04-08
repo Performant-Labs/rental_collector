@@ -14,11 +14,11 @@ automated daily pipeline.
 
 | Layer | Command | Container? |
 |---|---|---|
-| **Full suite (recommended)** | `podman compose run --rm dashboard-api python -m pytest dashboard/tests/ -v` | Yes |
-| Scraper unit tests only | `python -m pytest scraper/test_rental_search.py -v` | No |
+| **Full suite (recommended)** | `podman compose run --rm --remove-orphans dashboard-api python -m pytest dashboard/tests/ -v` | Yes |
+| Scraper unit tests only | `python -m pytest test_rental_search.py -v` (run from `scraper/` dir) | No |
 | Dashboard unit tests (no FastAPI) | `python -m pytest dashboard/tests/test_phase2_ingestion.py dashboard/tests/test_phase3_indexing.py -v` | No |
-| Live health check | `curl http://localhost:8000/health` | Stack running |
-| Public URL check | `curl https://rentals.performantlabs.com/health` | Tunnel running |
+| Live health check | `Invoke-WebRequest -Uri http://localhost:8000/health -UseBasicParsing` | Stack running |
+| Public URL check | `Invoke-WebRequest -Uri https://rentals.performantlabs.com/health -UseBasicParsing` | Tunnel running |
 
 ---
 
@@ -28,10 +28,17 @@ The recommended way to run all tests. This runs inside the dashboard container w
 dependencies (FastAPI, Meilisearch client, Jinja2) are installed.
 
 ```powershell
-podman compose run --rm dashboard-api python -m pytest dashboard/tests/ -v
+podman compose run --rm --remove-orphans dashboard-api python -m pytest dashboard/tests/ -v
 ```
 
 **Expected:** 59 passed, 2 skipped, 0 failed.
+
+> **Known issue:** `podman compose run` may exit with code 1 even when all tests pass.
+> This is caused by Podman's Docker Desktop wrapper emitting an "orphan containers" warning
+> to stderr, which PowerShell treats as a NativeCommandError. The exit code from pytest
+> itself is 0. Check the last line of output (`X passed, Y skipped`) to confirm test results —
+> do **not** rely on the shell exit code alone when running via `podman compose run`.
+> Adding `--remove-orphans` reduces but may not eliminate this warning.
 
 The 2 skipped tests are:
 - `test_ingestion_handles_real_scraper_output` — skipped if no `rentals/` folders exist
@@ -48,8 +55,12 @@ The 2 skipped tests are:
 | `scraper/test_rental_search.py` | `normalise()`, `_parse_price_usd()`, `merge_listings()`, `generate_listing_html()`, `scrape_airbnb_local()`, `fetch_photos()`, `save_listing_folder()`, `update_listing_folder()`, `_scan_existing()` |
 
 ```powershell
-python -m pytest scraper/test_rental_search.py -v
+# Must be run from the scraper/ directory
+Set-Location scraper
+python -m pytest test_rental_search.py -v
 ```
+
+**Expected:** 147 passed.
 
 ### Dashboard Tests — Ingestion & Indexing
 
@@ -107,12 +118,12 @@ podman compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner -
 ### Verify
 
 ```powershell
-# Local health check
-curl http://localhost:8000/health
+# Local health check (use Invoke-WebRequest — curl may hang on Windows)
+Invoke-WebRequest -Uri http://localhost:8000/health -UseBasicParsing | Select-Object -ExpandProperty Content
 # Expected: {"status":"ok"}
 
 # Meilisearch health
-curl http://localhost:7700/health
+Invoke-WebRequest -Uri http://localhost:7700/health -UseBasicParsing | Select-Object -ExpandProperty Content
 # Expected: {"status":"available"}
 
 # Open dashboard
@@ -127,7 +138,7 @@ The dashboard is publicly accessible via Cloudflare Tunnel at `https://rentals.p
 
 ```powershell
 # Public health check
-curl https://rentals.performantlabs.com/health
+Invoke-WebRequest -Uri https://rentals.performantlabs.com/health -UseBasicParsing | Select-Object -ExpandProperty Content
 # Expected: {"status":"ok"}
 ```
 
@@ -187,15 +198,18 @@ Get-Content logs/daily_update.log -Tail 20
 Get-Content rentals/last_run.txt
 
 # Verify the dashboard shows the timestamp
-curl http://localhost:8000 | Select-String "Last updated"
+$r = Invoke-WebRequest -Uri http://localhost:8000 -UseBasicParsing; ($r.Content -split "`n" | Select-String "Last updated")
 ```
 
 ### Task Scheduler
 
 ```powershell
 # Check task status
-Get-ScheduledTask -TaskName "RentalCollector_DailySearch" | Select-Object TaskName, State, LastRunTime
+Get-ScheduledTask -TaskName "RentalCollector_DailySearch" | Select-Object TaskName, State, LastRunTime, NextRunTime
 ```
+
+> **Note:** `LastRunTime` and `NextRunTime` will be blank if the task has never triggered.
+> After the first 3:00 AM run, both fields will populate. Use `powershell -File scripts/daily_update.ps1` for a manual trigger.
 
 ---
 
@@ -246,6 +260,10 @@ podman compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner -
 ## 9. Known Environment Notes
 
 - **FastAPI / Meilisearch client** are only installed inside the Docker container — not in the system Python. Tests importing these must run via `podman compose run`.
+- **Scraper tests must be run from the `scraper/` directory** — the test file imports `rental_search` directly as a module, which requires `scraper/` to be the working directory.
+- **`curl` may hang on Windows PowerShell** — use `Invoke-WebRequest` instead for all HTTP health checks.
+- **`podman compose run` exit code 1 is a known Podman wrapper issue** — it's triggered by an orphan container warning emitted to stderr by the Docker Desktop compatibility layer. The tests themselves all pass. Trust the pytest output (`X passed`), not the shell exit code.
 - **Pyrefly lint warnings** about "Cannot find module `fastapi`" or "Cannot find module `rental_search`" are **false positives** — these resolve inside the container.
+- **`logs/daily_update.log` and `LastRunTime` in Task Scheduler** will be absent until the task runs for the first time (3:00 AM). Use `powershell -File scripts/daily_update.ps1` for a manual trigger.
 - All tests mock external services (Meilisearch, Airbnb CDN, Claude API, Jina Reader) — **no network access or API keys needed** to run the test suite.
 - The 2 skipped tests will auto-enable when their prerequisites are met (listing folders exist, `litellm` installed).
