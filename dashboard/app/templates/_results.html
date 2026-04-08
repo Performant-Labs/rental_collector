@@ -23,7 +23,7 @@
         {# --- Card body --- #}
         <h3>{{ listing.title or "Untitled" }}</h3>
         <div class="muted">{{ listing.location or "Todos Santos" }}</div>
-        {% if listing.source %}<div class="pill">{{ listing.source }}</div>{% endif %}
+        {% if listing.source %}<div class="pill" data-source="{{ listing.source }}">{{ listing.source }}</div>{% endif %}
         <div style="margin-top:8px;">
           {% if listing.price_usd %}
             <strong>${{ listing.price_usd }}/mo</strong>
