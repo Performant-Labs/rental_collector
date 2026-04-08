@@ -253,19 +253,88 @@ def convert_message(msg: dict) -> dict:
         "scraped":      _extract_scraped(msg),
         "localPhotos":  [],          # populated later in Phase 3
         # Carry WA-specific fields for folder generation / media copy
-        "_wa_score":      msg.get("rental_score"),
-        "_wa_media_file": msg.get("media_file"),
-        "_wa_id":         msg.get("id"),
+        "_wa_score":       msg.get("rental_score"),
+        "_wa_media_file":  msg.get("media_file"),
+        "_wa_media_files": [],        # populated by _find_nearby_images()
+        "_wa_id":          msg.get("id"),
+        "_wa_stanza_id":   msg.get("stanza_id"),
+        "_wa_from_jid":    msg.get("from_jid"),
     }
+
+
+
+def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[dict]:
+    """
+    For each listing, scan all_messages for image-type messages from the same
+    sender within a ±10 message window.  Attach their media filenames
+    to the listing's _wa_media_files list.
+
+    This handles the common WhatsApp pattern where a user sends a text message
+    about a rental followed by several separate image messages.
+
+    Note: messages.json doesn't have a `media_file` field — that's only in
+    rentals.json.  We derive the filename from type_int (1=image) + media_id
+    using the convention `{media_id}.jpg` and check existence on disk.
+    """
+    WINDOW = 10  # look ±10 messages from the listing's source message
+
+    # Build an index: stanza_id → position in all_messages
+    stanza_to_idx = {}
+    for i, m in enumerate(all_messages):
+        sid = m.get("stanza_id")
+        if sid:
+            stanza_to_idx[sid] = i
+
+    for listing in listings:
+        stanza_id = listing.get("_wa_stanza_id")
+        if not stanza_id or stanza_id not in stanza_to_idx:
+            continue
+
+        center = stanza_to_idx[stanza_id]
+        lo = max(0, center - WINDOW)
+        hi = min(len(all_messages), center + WINDOW + 1)
+
+        media_files = []
+        for j in range(lo, hi):
+            m = all_messages[j]
+            # type_int == 1 means image message
+            if m.get("type_int") != 1:
+                continue
+            media_id = m.get("media_id")
+            if not media_id:
+                continue
+            candidate = f"{media_id}.jpg"
+            if (WA_MEDIA_DIR / candidate).exists():
+                media_files.append(candidate)
+
+        # Also include the listing's own media_file if it has one
+        own = listing.get("_wa_media_file")
+        if own and own not in media_files:
+            media_files.insert(0, own)
+
+        listing["_wa_media_files"] = media_files
+
+    return listings
 
 
 def load_and_filter(path: Path, min_score: int) -> List[dict]:
     """
     Load rentals.json, apply score filter, deduplicate, convert, then
-    filter out listings above MAX_USD.  Returns a list of canonical dicts.
+    filter out listings above MAX_USD.  Also loads the full messages.json
+    to find nearby images for each listing.
     """
     with open(path, encoding="utf-8") as f:
         messages = json.load(f)
+
+    # Load all messages for nearby-image association
+    messages_json_path = path.parent / "messages.json"
+    all_messages = []
+    if messages_json_path.exists():
+        try:
+            with open(messages_json_path, encoding="utf-8") as f:
+                all_messages = json.load(f)
+        except Exception:
+            pass
 
     # 1. Score filter
     messages = [m for m in messages if (m.get("rental_score") or 0) >= min_score]
@@ -276,7 +345,11 @@ def load_and_filter(path: Path, min_score: int) -> List[dict]:
     # 3. Convert to canonical schema
     listings = [convert_message(m) for m in messages]
 
-    # 4. Price cap
+    # 4. Find nearby images from the full message stream
+    if all_messages:
+        listings = _find_nearby_images(listings, all_messages)
+
+    # 5. Price cap
     listings = [
         l for l in listings
         if l["price_usd"] is None or l["price_usd"] <= MAX_USD
@@ -327,18 +400,29 @@ def _next_index() -> int:
 
 def _copy_media(listing: dict, dest_folder: Path) -> List[str]:
     """
-    Copy the WA media file (if any) into dest_folder as photo_01.jpg.
+    Copy WA media files (if any) into dest_folder as photo_01.jpg, photo_02.jpg, etc.
+    Checks _wa_media_files (nearby images) first, falls back to _wa_media_file.
     Returns a list of copied filenames (empty if none).
     """
-    media_file = listing.get("_wa_media_file")
-    if not media_file:
+    media_files = listing.get("_wa_media_files") or []
+    if not media_files:
+        single = listing.get("_wa_media_file")
+        if single:
+            media_files = [single]
+    if not media_files:
         return []
-    src = WA_MEDIA_DIR / media_file
-    if not src.exists():
-        return []
-    dest = dest_folder / "photo_01.jpg"
-    shutil.copy2(src, dest)
-    return ["photo_01.jpg"]
+
+    copied = []
+    for i, media_file in enumerate(media_files, 1):
+        src = WA_MEDIA_DIR / media_file
+        if not src.exists():
+            continue
+        dest_name = f"photo_{i:02d}.jpg"
+        dest = dest_folder / dest_name
+        shutil.copy2(src, dest)
+        copied.append(dest_name)
+
+    return copied
 
 
 # ── HTML generation ────────────────────────────────────────────────────

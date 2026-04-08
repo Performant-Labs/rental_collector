@@ -172,7 +172,8 @@ class TestFieldMapping(unittest.TestCase):
         expected = {"title", "source", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
                     "listing_type", "checkin", "checkout", "scraped", "localPhotos",
-                    "_wa_score", "_wa_media_file", "_wa_id"}
+                    "_wa_score", "_wa_media_file", "_wa_media_files",
+                    "_wa_id", "_wa_stanza_id", "_wa_from_jid"}
         self.assertEqual(set(result.keys()), expected)
 
     def test_source_is_whatsapp(self):
