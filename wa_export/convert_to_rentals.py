@@ -76,6 +76,33 @@ _PHONE_RE = re.compile(
     r"\d{3}[\s.-]?\d{4}",
 )
 
+# Known Baja California Sur towns/areas that appear in WA rental messages.
+# Order matters: more specific names before shorter ones (e.g. match
+# "El Pescadero" before "Pescadero").
+_KNOWN_LOCATIONS: List[str] = [
+    "Todos Santos",
+    "El Pescadero",
+    "Pescadero",
+    "La Paz",
+    "Los Cabos",
+    "Cabo San Lucas",
+    "San José del Cabo",
+    "San Jose del Cabo",
+    "Los Barriles",
+    "El Triunfo",
+    "Miraflores",
+    "San Pedrito",
+    "Cerritos",
+    "Buena Vista",
+    "El Sargento",
+    "La Ventana",
+    "Santiago",
+]
+_LOCATION_RE = re.compile(
+    "|".join(re.escape(loc) for loc in _KNOWN_LOCATIONS),
+    re.I,
+)
+
 
 # ── Price parsing (mirrors rental_search._parse_price_usd) ───────────────────
 
@@ -188,6 +215,25 @@ def _extract_scraped(msg: dict) -> str:
     return TODAY
 
 
+def _extract_location(text: str) -> str:
+    """
+    Scan message text for a known Baja California town/area name.
+    Returns the canonical capitalisation of the first match, or
+    'Todos Santos' as the default when nothing is found.
+    """
+    if not text:
+        return "Todos Santos"
+    m = _LOCATION_RE.search(text)
+    if m:
+        # Return the canonical form (from _KNOWN_LOCATIONS), not whatever casing
+        # happened to appear in the text.
+        matched_lower = m.group(0).lower()
+        for loc in _KNOWN_LOCATIONS:
+            if loc.lower() == matched_lower:
+                return loc
+    return "Todos Santos"
+
+
 # ── Conversion ────────────────────────────────────────────────────────────────
 
 def convert_message(msg: dict) -> dict:
@@ -198,7 +244,7 @@ def convert_message(msg: dict) -> dict:
         "source":       SOURCE,
         "price_usd":    _parse_price_usd(text),
         "bedrooms":     _extract_bedrooms(text),
-        "location":     "Todos Santos",
+        "location":     _extract_location(text),
         "url":          None,
         "contact":      _extract_contact(msg),
         "description":  text,

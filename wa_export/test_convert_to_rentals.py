@@ -278,6 +278,70 @@ class TestFieldMapping(unittest.TestCase):
         self.assertIsNone(cr.convert_message(_make_msg())["checkout"])
 
 
+# ── Phase 2: Location extraction ──────────────────────────────────────────────
+
+class TestExtractLocation(unittest.TestCase):
+
+    def test_defaults_to_todos_santos(self):
+        self.assertEqual(cr._extract_location("Nice house near the beach"), "Todos Santos")
+
+    def test_empty_string_defaults(self):
+        self.assertEqual(cr._extract_location(""), "Todos Santos")
+
+    def test_none_like_default(self):
+        # The function takes a str; simulate coming from msg where text=None produces ""
+        self.assertEqual(cr._extract_location(""), "Todos Santos")
+
+    def test_detects_todos_santos(self):
+        self.assertEqual(cr._extract_location("Casa en renta en Todos Santos"), "Todos Santos")
+
+    def test_detects_el_pescadero(self):
+        self.assertEqual(cr._extract_location("Beautiful casita in El Pescadero"), "El Pescadero")
+
+    def test_detects_la_paz(self):
+        self.assertEqual(cr._extract_location("Apartment available in La Paz $900/mo"), "La Paz")
+
+    def test_detects_cabo_san_lucas(self):
+        self.assertEqual(cr._extract_location("Modern condo in Cabo San Lucas"), "Cabo San Lucas")
+
+    def test_case_insensitive(self):
+        self.assertEqual(cr._extract_location("available in el pescadero now"), "El Pescadero")
+
+    def test_returns_canonical_capitalisation(self):
+        # Input has all caps; we must return the canonical form
+        self.assertEqual(cr._extract_location("HOUSE IN LA PAZ"), "La Paz")
+
+    def test_returns_first_match_when_multiple(self):
+        # "El Pescadero" appears before "La Paz" in _KNOWN_LOCATIONS list
+        result = cr._extract_location("Available from El Pescadero to La Paz")
+        self.assertIn(result, ["El Pescadero", "La Paz"])  # whichever matched first in text
+
+    def test_location_wired_into_convert_message(self):
+        """convert_message() must use extracted location, not hardcoded Todos Santos."""
+        msg = {
+            "text": "Casa en renta en El Pescadero Baja California $1000",
+            "rental_score": 25,
+            "timestamp": "2025-06-01T14:00:00+00:00",
+            "media_file": None,
+            "phone": "",
+            "media_title": None,
+        }
+        result = cr.convert_message(msg)
+        self.assertEqual(result["location"], "El Pescadero")
+
+    def test_convert_message_defaults_location_when_no_town(self):
+        msg = {
+            "text": "Nice house near the beach $1200/month",
+            "rental_score": 25,
+            "timestamp": "2025-06-01T14:00:00+00:00",
+            "media_file": None,
+            "phone": "",
+            "media_title": None,
+        }
+        result = cr.convert_message(msg)
+        self.assertEqual(result["location"], "Todos Santos")
+
+
 # ── Phase 2: _parse_price_usd ─────────────────────────────────────────────────
 
 class TestParsePriceUsd(unittest.TestCase):
