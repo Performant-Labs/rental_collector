@@ -1,7 +1,26 @@
 {% if search.results %}
   <div class="results-grid">
     {% for listing in search.results %}
-      <article class="card">
+      <article class="card" {% if listing.photos %}data-photos="{{ listing.photos | join(',') }}"{% endif %}>
+
+        {# --- Photo thumbnail + hover gallery --- #}
+        {% if listing.photos %}
+          <div class="card-photo-wrap">
+            <img
+              class="card-thumb"
+              src="{{ listing.photos[0] }}"
+              alt="Photo of {{ listing.title or 'listing' }}"
+              loading="lazy"
+            />
+            <div class="photo-popup" aria-hidden="true">
+              {% for photo in listing.photos %}
+                <img src="{{ photo }}" alt="Photo {{ loop.index }} of {{ listing.title or 'listing' }}" loading="lazy" />
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        {# --- Card body --- #}
         <h3>{{ listing.title or "Untitled" }}</h3>
         <div class="muted">{{ listing.location or "Todos Santos" }}</div>
         {% if listing.source %}<div class="pill">{{ listing.source }}</div>{% endif %}

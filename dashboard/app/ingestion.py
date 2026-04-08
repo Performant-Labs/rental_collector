@@ -103,6 +103,11 @@ def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, A
     except ValueError:
         listing_path = str(listing_html_path)
 
+    # Build photo URL paths relative to the repo root so the frontend can render them
+    listing_dir = str(folder.relative_to(REPO_ROOT)) if folder.is_relative_to(REPO_ROOT) else str(folder)
+    listing_dir = listing_dir.replace("\\", "/")  # normalize Windows backslashes
+    photo_urls = [f"/{listing_dir}/{p}" for p in local_photos]
+
     return {
         "id": listing_id,
         "title": title,
@@ -116,6 +121,7 @@ def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, A
         "has_contact": has_contact,
         "scraped": str(raw.get("scraped") or "").strip() or None,
         "listing_path": listing_path,
+        "photos": photo_urls,
     }
 
 

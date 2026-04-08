@@ -60,6 +60,16 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+def _get_last_run_time() -> str:
+    last_run_path = REPO_ROOT / "rentals" / "last_run.txt"
+    if last_run_path.exists():
+        try:
+            return last_run_path.read_text(encoding="utf-8").strip()
+        except Exception:
+            return "unknown"
+    return "never"
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
@@ -76,6 +86,7 @@ def home(
             "title": "Todos Santos Rentals Dashboard",
             "search": search,
             "facet_fields": FACET_FIELDS,
+            "last_run": _get_last_run_time(),
         },
     )
 

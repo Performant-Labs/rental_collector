@@ -74,6 +74,13 @@ try:
 except ImportError:
     anthropic = None
 
+# Lazy-import litellm for --local mode
+try:
+    import litellm
+    litellm.suppress_debug_info = True
+except ImportError:
+    litellm = None
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 MAX_USD   = 2000
@@ -100,7 +107,8 @@ For each listing return a JSON object with these exact keys:
   source (site name), url (direct link or null), contact (email/phone if shown),
   description (full listing text), amenities (array, [] if unknown),
   rating (null), listing_type (null), checkin (null), checkout (null),
-  scraped (today\u2019s date "{TODAY}")
+  scraped (today\u2019s date "{TODAY}"),
+  photo_url (the direct URL of the main listing photo image if visible on the page, otherwise null)
 
 Return ONLY a JSON array of listing objects — no prose, no markdown fences.
 Exclude anything clearly over ${MAX_USD}/month. If price is in MXN, convert at 17.5 MXN/USD.
@@ -144,6 +152,7 @@ def normalise(raw: dict, source: str) -> dict:
         "checkin":      raw.get("checkin"),
         "checkout":     raw.get("checkout"),
         "scraped":      raw.get("scraped") or TODAY,
+        "photo_url":    raw.get("photo_url"),
     }
 
 # ── Direct scrapers ───────────────────────────────────────────────────────────
@@ -330,10 +339,81 @@ CLAUDE_SEARCH_TASKS = [
           "List all rentals on this page. Focus on long-term, 5+ months."),
     _task("pescprop",   "https://pescaderopropertymgmt.com/rentals",
           "List all rental listings on this page for Todos Santos / El Pescadero area."),
+    _task("airbnb-live",
+          "https://www.airbnb.com/s/Todos-Santos--Baja-California-Sur--Mexico/homes"
+          "?refinement_paths%5B%5D=%2Fhomes&tab_id=home_tab"
+          "&flexible_trip_lengths%5B%5D=one_month&monthly_start_date=2026-05-01"
+          "&monthly_length=3&monthly_end_date=2026-08-01&price_filter_input_type=2"
+          "&price_filter_num_nights=90&channel=EXPLORE",
+          "This is an Airbnb monthly-stays search for Todos Santos. "
+          "Extract each visible listing: title, nightly price (multiply by 30 for monthly), "
+          "url, rating, description, and photo_url (the main listing image src). "
+          "Skip listings over $2000/month when converted."),
 ]
 
 
 CLAUDE_CLI_PATH = shutil.which("claude") or "/opt/homebrew/bin/claude"
+
+JINA_BASE = "https://r.jina.ai/"
+
+
+def fetch_url_via_jina(url: str) -> str:
+    """Fetch a URL as clean markdown via Jina Reader (no JS required)."""
+    try:
+        resp = requests.get(
+            JINA_BASE + url,
+            headers={**HEADERS, "Accept": "text/plain"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.text[:12000]  # cap at 12k chars to stay within LLM context
+    except Exception as e:
+        print(f"  [jina] {url} → {e}", file=sys.stderr)
+        return ""
+
+
+def search_with_litellm(user_msg: str, label: str = "", model: str = "openai/gemma-4-26B-A4B-it") -> List[dict]:
+    """Use a local LLM via LiteLLM + Jina Reader to extract rental listings."""
+    if litellm is None:
+        print("  [litellm] litellm not installed. Run: pip install litellm", file=sys.stderr)
+        return []
+
+    tag = f"local-llm/{label}" if label else "local-llm"
+
+    # Extract the URL from the user message
+    url_match = re.search(r'https?://\S+', user_msg)
+    if not url_match:
+        print(f"  [{tag}] no URL found in task message", file=sys.stderr)
+        return []
+
+    url = url_match.group(0)
+    print(f"  [{tag}] Fetching {url} via Jina …")
+    page_content = fetch_url_via_jina(url)
+    if not page_content:
+        return []
+
+    prompt = f"{user_msg}\n\nPage content:\n{page_content}"
+    print(f"  [{tag}] Calling local LLM ({model}) …")
+    try:
+        response = litellm.completion(
+            model=model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt},
+            ],
+            api_base="http://localhost:1234/v1",
+            api_key="lm-studio",
+            temperature=0.1,
+            max_tokens=4096,
+        )
+        raw = response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"  [{tag}] LLM error: {e}", file=sys.stderr)
+        return []
+
+    results = _parse_claude_output(raw, "local-llm")
+    print(f"  [{tag}] → {len(results)} listing(s)")
+    return results
 
 
 def _parse_claude_output(raw: str, source: str) -> List[dict]:
@@ -855,9 +935,25 @@ def save_listing_folder(listing: dict, index: int) -> Path:
     folder = RESULTS_DIR / _folder_name(listing, index)
     folder.mkdir(exist_ok=True)
 
-    # Fetch photos when the listing has a URL and we don't already have any
+    # 1. Use photo_url if the LLM extracted it directly (works for Airbnb)
     local_photos = listing.get("localPhotos") or []
-    if not local_photos and listing.get("url"):
+    photo_url = listing.get("photo_url")
+    if not local_photos and photo_url and photo_url.startswith("http"):
+        print(f"    ↓ downloading cover photo from LLM-extracted URL …")
+        local_name = "photo_01.jpg"
+        local_path = folder / local_name
+        try:
+            req = requests.get(photo_url, headers=HEADERS, timeout=15)
+            req.raise_for_status()
+            if len(req.content) >= 2000:
+                local_path.write_bytes(req.content)
+                local_photos = [local_name]
+                print(f"    → cover photo saved")
+        except Exception as e:
+            print(f"    ✗ photo download failed: {e}")
+
+    # 2. Fall back to scraping the listing page (works for non-Airbnb sites)
+    if not local_photos and listing.get("url") and "airbnb.com" not in (listing.get("url") or ""):
         print(f"    ↓ fetching photos from {listing['url']} …")
         local_photos = fetch_photos(listing["url"], folder)
         if local_photos:
@@ -995,6 +1091,8 @@ def main():
     parser.add_argument("--diff", action="store_true", help="Save + diff each source against previous run")
     parser.add_argument("--cli", action="store_true", help="Use the `claude` CLI instead of the Python SDK")
     parser.add_argument("--no-claude", action="store_true", help="Skip Claude entirely (scrape only)")
+    parser.add_argument("--local", action="store_true", help="Use a local LLM via LiteLLM + Jina Reader")
+    parser.add_argument("--model", default="openai/gemma-4-26B-A4B-it", help="LiteLLM model string for --local mode")
     args = parser.parse_args()
 
     # Collect results per source
@@ -1009,10 +1107,23 @@ def main():
     print("Scraping TodosSantos.cc …")
     source_results["todossantos"] = scrape_todos_santos_cc()
 
-    if not args.no_claude:
-        # Run each focused search task in sequence.
-        # Results accumulate under a single source key ("claude-cli" or
-        # "claude-api") so save/diff/dedup logic is unchanged.
+    if args.local:
+        # Local LLM mode: sequential to respect GPU memory limits
+        print(f"Searching via local LLM ({args.model}, {len(CLAUDE_SEARCH_TASKS)} tasks, sequential) …")
+        combined: List[dict] = []
+        for task in CLAUDE_SEARCH_TASKS:
+            try:
+                combined.extend(search_with_litellm(
+                    user_msg=task["user_msg"],
+                    label=task["label"],
+                    model=args.model,
+                ))
+            except Exception as e:
+                print(f"  [local-llm/{task['label']}] error: {e}", file=sys.stderr)
+        source_results["local-llm"] = combined
+
+    elif not args.no_claude:
+        # Cloud LLM mode (Claude API or CLI)
         api_ready = anthropic is not None and bool(os.environ.get("ANTHROPIC_API_KEY"))
         cli_ready = os.path.isfile(CLAUDE_CLI_PATH)
 

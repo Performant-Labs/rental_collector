@@ -32,5 +32,14 @@ services:
     volumes:
       - meili_data:/meili_data
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --protocol http2
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - dashboard-api
+
 volumes:
   meili_data:
