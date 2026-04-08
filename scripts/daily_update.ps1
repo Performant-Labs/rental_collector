@@ -20,6 +20,18 @@ Write-Log "--------------------------------------------------"
 Write-Log "Phase 1: Scraping listings (this will take a few minutes)..."
 & python scraper/rental_search.py --local --save --model openai/gemma-4-26B-A4B-it 2>&1 | Add-Content -Path $LogFile
 
+# 1.5. Score WhatsApp messages → output/rentals.json
+#      (convert_to_rentals.py is called automatically inside ingest_runner,
+#       but 4_find_rentals.py must be run first to build rentals.json)
+Write-Log "Phase 1.5: Scoring WhatsApp messages..."
+if (Test-Path "$ProjectRoot\wa_export\output\messages.json") {
+    & python wa_export/4_find_rentals.py 2>&1 | Add-Content -Path $LogFile
+    Write-Log "  WhatsApp scoring complete."
+} else {
+    Write-Log "  wa_export/output/messages.json not found — skipping WA scoring."
+    Write-Log "  Run: python wa_export/1_export_messages.py  (requires ChatStorage.sqlite)"
+}
+
 # 2. Move new JSON results to the root rentals directory
 Write-Log "Phase 2: Moving results to ingestion folder..."
 if (Test-Path "$ProjectRoot\scraper\rentals\*.json") {
