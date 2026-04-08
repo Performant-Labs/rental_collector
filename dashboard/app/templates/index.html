@@ -67,6 +67,9 @@
       <div class="header">
         <h1>{{ title }}</h1>
         <div class="muted">HTMX dashboard over Meilisearch</div>
+        {% if last_run %}
+          <div class="muted" style="font-size:12px; margin-top:4px;">Last updated: {{ last_run }}</div>
+        {% endif %}
       </div>
 
       <form
