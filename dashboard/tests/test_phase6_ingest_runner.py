@@ -98,13 +98,91 @@ def test_wa_conversion_skipped_when_converter_missing(tmp_path):
     assert result is False
 
 
-def test_wa_conversion_skipped_when_rentals_json_missing(tmp_path):
-    """Converter exists but output/rentals.json doesn't yet — return False."""
+def test_wa_conversion_triggers_scoring_when_rentals_json_missing(tmp_path):
+    """When rentals.json is absent, run_wa_scoring() is called automatically."""
     converter = tmp_path / "convert_to_rentals.py"
     converter.write_text("# stub")
-    with patch.object(ingest_runner, "_WA_CONVERTER", converter):
+    wa_dir = tmp_path
+
+    scoring_called = {"count": 0}
+
+    def fake_scoring():
+        """Simulate scorer creating rentals.json."""
+        scoring_called["count"] += 1
+        (wa_dir / "output").mkdir(exist_ok=True)
+        (wa_dir / "output" / "rentals.json").write_text("[]")
+        return True
+
+    mock_result = MagicMock(returncode=0, stdout="5 listings", stderr="")
+
+    with patch.object(ingest_runner, "_WA_CONVERTER", converter), \
+         patch.object(ingest_runner, "_WA_DIR", wa_dir), \
+         patch.object(ingest_runner, "run_wa_scoring", fake_scoring), \
+         patch("dashboard.app.ingest_runner.subprocess.run", return_value=mock_result):
         result = ingest_runner.run_wa_export_conversion()
-    assert result is False
+
+    assert scoring_called["count"] == 1
+    assert result is True
+
+
+# ── run_wa_scoring tests ──────────────────────────────────────────────────────
+
+def test_wa_scoring_skipped_when_scorer_missing(tmp_path):
+    with patch.object(ingest_runner, "_WA_SCORER", tmp_path / "nonexistent.py"):
+        assert ingest_runner.run_wa_scoring() is False
+
+
+def test_wa_scoring_skipped_when_messages_json_missing(tmp_path):
+    scorer = tmp_path / "4_find_rentals.py"
+    scorer.write_text("# stub")
+    wa_dir = tmp_path          # output/messages.json does NOT exist
+    with patch.object(ingest_runner, "_WA_SCORER", scorer), \
+         patch.object(ingest_runner, "_WA_DIR", wa_dir):
+        assert ingest_runner.run_wa_scoring() is False
+
+
+def test_wa_scoring_runs_when_messages_json_present(tmp_path):
+    scorer = tmp_path / "4_find_rentals.py"
+    scorer.write_text("# stub")
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output" / "messages.json").write_text("[]")
+
+    mock_result = MagicMock(returncode=0, stdout="100 messages", stderr="")
+    with patch.object(ingest_runner, "_WA_SCORER", scorer), \
+         patch.object(ingest_runner, "_WA_DIR", tmp_path), \
+         patch("dashboard.app.ingest_runner.subprocess.run", return_value=mock_result) as mock_run:
+        result = ingest_runner.run_wa_scoring()
+
+    assert result is True
+    mock_run.assert_called_once()
+    assert str(scorer) in mock_run.call_args[0][0]
+
+
+def test_wa_scoring_returns_false_on_nonzero_exit(tmp_path):
+    scorer = tmp_path / "4_find_rentals.py"
+    scorer.write_text("# stub")
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output" / "messages.json").write_text("[]")
+
+    mock_result = MagicMock(returncode=1, stdout="", stderr="uh oh")
+    with patch.object(ingest_runner, "_WA_SCORER", scorer), \
+         patch.object(ingest_runner, "_WA_DIR", tmp_path), \
+         patch("dashboard.app.ingest_runner.subprocess.run", return_value=mock_result):
+        assert ingest_runner.run_wa_scoring() is False
+
+
+def test_wa_scoring_returns_false_on_timeout(tmp_path):
+    import subprocess
+    scorer = tmp_path / "4_find_rentals.py"
+    scorer.write_text("# stub")
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output" / "messages.json").write_text("[]")
+
+    with patch.object(ingest_runner, "_WA_SCORER", scorer), \
+         patch.object(ingest_runner, "_WA_DIR", tmp_path), \
+         patch("dashboard.app.ingest_runner.subprocess.run",
+               side_effect=subprocess.TimeoutExpired("python", 300)):
+        assert ingest_runner.run_wa_scoring() is False
 
 
 def test_wa_conversion_called_when_data_present(tmp_path):

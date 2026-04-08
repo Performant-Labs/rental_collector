@@ -16,10 +16,63 @@ DEFAULT_LOCK_FILE = Path("/tmp/todossantos-dashboard-ingest.lock")
 
 logger = logging.getLogger(__name__)
 
-# Path to the WhatsApp converter, relative to the repo root
+# Paths to the WhatsApp pipeline scripts, relative to the repo root
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_WA_CONVERTER = _REPO_ROOT / "wa_export" / "convert_to_rentals.py"
+_WA_DIR       = _REPO_ROOT / "wa_export"
+_WA_SCORER    = _WA_DIR / "4_find_rentals.py"    # messages.json → rentals.json
+_WA_CONVERTER = _WA_DIR / "convert_to_rentals.py" # rentals.json  → rentals/ folders
 _WA_MIN_SCORE = int(os.environ.get("WA_MIN_SCORE", "15"))
+
+
+def run_wa_scoring() -> bool:
+    """
+    Run wa_export/4_find_rentals.py to produce output/rentals.json from
+    output/messages.json.  Non-fatal; returns False if unavailable or failed.
+
+    Prerequisite: output/messages.json must exist (produced by 1_export_messages.py
+    which reads ChatStorage.sqlite).  If messages.json is missing, this step is
+    skipped with an informational log — the SQLite file is machine-specific and
+    cannot be automated here.
+    """
+    if not _WA_SCORER.exists():
+        logger.warning("wa_export: scorer not found at %s — skipping", _WA_SCORER)
+        return False
+
+    messages_json = _WA_DIR / "output" / "messages.json"
+    if not messages_json.exists():
+        logger.info(
+            "wa_export: %s not found — run 1_export_messages.py against ChatStorage.sqlite first",
+            messages_json,
+        )
+        return False
+
+    cmd = [sys.executable, str(_WA_SCORER)]
+    logger.info("wa_export: scoring messages — running %s", " ".join(cmd))
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,           # scoring can be slow on large datasets
+            cwd=str(_WA_DIR),
+        )
+        if result.stdout:
+            logger.info("wa_export scorer stdout:\n%s", result.stdout.strip())
+        if result.returncode != 0:
+            logger.error(
+                "wa_export: scorer exited %d — stderr: %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+            return False
+        logger.info("wa_export: scoring complete")
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error("wa_export: scorer timed out after 300 s")
+        return False
+    except Exception as exc:
+        logger.error("wa_export: unexpected error running scorer: %s", exc)
+        return False
 
 
 def run_wa_export_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
@@ -28,20 +81,21 @@ def run_wa_export_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
     WhatsApp listings are deposited into rentals/ and picked up by the
     Meilisearch indexer in the same run.
 
-    Returns True on success, False if the converter is unavailable or fails.
-    Failures are non-fatal: the rest of ingestion proceeds regardless.
+    If output/rentals.json is missing, run_wa_scoring() is called first to
+    produce it.  Returns True on success, False on any failure (non-fatal).
     """
     if not _WA_CONVERTER.exists():
         logger.warning("wa_export: converter not found at %s — skipping", _WA_CONVERTER)
         return False
 
-    wa_rentals = _WA_CONVERTER.parent / "output" / "rentals.json"
+    wa_rentals = _WA_DIR / "output" / "rentals.json"
     if not wa_rentals.exists():
-        logger.info(
-            "wa_export: %s not found — run 4_find_rentals.py first, skipping",
-            wa_rentals,
-        )
-        return False
+        logger.info("wa_export: rentals.json missing — running scorer first")
+        if not run_wa_scoring():
+            return False
+        if not wa_rentals.exists():
+            logger.error("wa_export: rentals.json still missing after scoring — aborting")
+            return False
 
     cmd = [sys.executable, str(_WA_CONVERTER), "--save", "--min-score", str(min_score)]
     logger.info("wa_export: running %s", " ".join(cmd))
