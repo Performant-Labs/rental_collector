@@ -320,8 +320,6 @@ def _generate_listing_html(listing: dict) -> str:
     sys.path.insert(0, str(_PROJECT / "scraper"))
     try:
         import rental_search as rs   # type: ignore
-        # Inject whatsapp color if not present
-        rs.SOURCE_COLORS.setdefault(SOURCE, "#25D366")
         return rs.generate_listing_html(listing)
     except ImportError:
         # Minimal fallback if rental_search isn't importable (e.g. missing deps)

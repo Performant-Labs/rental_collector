@@ -649,6 +649,7 @@ SOURCE_COLORS = {
     "todossantos": "#2d6a4f",
     "claude-api":  "#6B46C1",
     "claude-cli":  "#6B46C1",
+    "whatsapp":    "#25D366",
 }
 
 

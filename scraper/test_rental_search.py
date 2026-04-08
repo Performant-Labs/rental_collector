@@ -779,6 +779,16 @@ class TestGenerateListingHtml(unittest.TestCase):
         html = rs.generate_listing_html(listing)
         self.assertIn(rs.SOURCE_COLORS["airbnb"], html)
 
+    def test_whatsapp_color_in_source_colors(self):
+        self.assertIn("whatsapp", rs.SOURCE_COLORS)
+        self.assertEqual(rs.SOURCE_COLORS["whatsapp"], "#25D366")
+
+    def test_whatsapp_color_applied_to_listing_html(self):
+        listing = self._listing()
+        listing["source"] = "whatsapp"
+        html = rs.generate_listing_html(listing)
+        self.assertIn("#25D366", html)
+
     def test_cta_link_present(self):
         listing = self._listing()
         listing["url"] = "https://craigslist.org/abc"
