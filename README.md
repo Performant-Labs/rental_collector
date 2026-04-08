@@ -130,8 +130,29 @@ Flags can be combined: `python3 scraper/rental_search.py --cli --diff`
 | Craigslist Baja Sur | Direct HTTP scrape |
 | TodosSantos.cc | Direct HTTP scrape (classifieds, housing, rentals pages) |
 | Claude web search | Claude API or CLI with `web_search` tool — hits Amy Rex, Facebook groups, local agencies, and anything else it can find |
+| **WhatsApp** | `wa_export/convert_to_rentals.py` — converts scored messages from the WhatsApp group pipeline |
 
 **Duplicate handling:** when a listing already has a folder on disk, it is skipped if the price is unchanged, or its `info.json` and `listing.html` are updated in place (photos preserved) if the price has changed.
+
+---
+
+### `wa_export/convert_to_rentals.py` — push WhatsApp listings into `rentals/`
+
+Reads `wa_export/output/rentals.json` (produced by `4_find_rentals.py`) and converts scored WhatsApp messages into canonical rental listings, deduplicating repeat posts and copying media into listing folders.
+
+```bash
+# Dry run — print report only
+python3 wa_export/convert_to_rentals.py
+
+# Save dated JSON + listing folders
+python3 wa_export/convert_to_rentals.py --save
+
+# Save + show what's new vs. the previous run
+python3 wa_export/convert_to_rentals.py --diff
+
+# Raise the confidence bar (default is 15)
+python3 wa_export/convert_to_rentals.py --diff --min-score 20
+```
 
 ---
 
@@ -155,15 +176,24 @@ Todos Santos Rentals/
 │   ├── rental_search.py          # Main search + scrape script
 │   ├── download_photos.py        # Download Airbnb photos to local folders
 │   └── test_rental_search.py     # Unit tests
-├── dashboard/                     # Dashboard generator (coming soon)
+├── wa_export/                     # WhatsApp message export pipeline
+│   ├── 1_export_messages.py      # Export from ChatStorage.sqlite → output/messages.json
+│   ├── 4_find_rentals.py         # Score messages → output/rentals.json
+│   ├── convert_to_rentals.py     # Convert WA rentals → canonical schema in rentals/
+│   ├── test_convert_to_rentals.py
+│   ├── test_e2e_convert.py
+│   └── README.md
+├── dashboard/                     # Dashboard API + Meilisearch
 └── rentals/
     ├── airbnb-01-studio-1339usd/       # One folder per listing
     │   ├── info.json                   # Normalized metadata
     │   ├── listing.html                # Rendered card (open in browser)
     │   ├── photo_01.jpg
     │   └── …
-    ├── craigslist-01-…/                # Same structure for other sources
+    ├── whatsapp-01-…/                  # Same structure for WhatsApp listings
+    ├── craigslist-01-…/
     ├── airbnb-2026-04-05.json          # Per-source summary for analysis/diffing
+    ├── whatsapp-2026-04-08.json
     ├── craigslist-2026-04-05.json
     └── …
 ```

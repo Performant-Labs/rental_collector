@@ -9,3 +9,13 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .env
+
+# WAExport large data files (not committed)
+wa_export/ChatStorage.sqlite
+wa_export/ChatStorage.sqlite-shm
+wa_export/ChatStorage.sqlite-wal
+wa_export/output/
+wa_export/Media/
+wa_export/node_modules/
+wa_export/.baileys_auth/
+wa_export/.playwright_session/

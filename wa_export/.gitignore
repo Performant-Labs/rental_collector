@@ -1,0 +1,10 @@
+# Large data files — keep outside the repo
+ChatStorage.sqlite
+ChatStorage.sqlite-shm
+ChatStorage.sqlite-wal
+output/
+output
+Media/
+node_modules/
+.baileys_auth/
+.playwright_session/

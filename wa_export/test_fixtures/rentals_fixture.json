@@ -1,0 +1,80 @@
+[
+  {
+    "id": 1001,
+    "text": "Casa en Alquiler en El Pescadero, Baja California Sur\n\n2 habitaciones, 1 baño, cocina equipada, jardín.\n$18,000 MXN mensuales, todos los servicios incluidos.\n\nPara más información: 55 2578-0280 Mariano.",
+    "rental_score": 41,
+    "rental_keywords": ["$", "en alquiler", "mensual", "habitación", "baño"],
+    "timestamp": "2025-05-20T17:07:00+00:00",
+    "sent_at": "2025-05-20T17:07:01+00:00",
+    "type": "text",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": null,
+    "media_title": null
+  },
+  {
+    "id": 1002,
+    "text": "Casa en Alquiler en El Pescadero, Baja California Sur\n\n2 habitaciones, 1 baño, cocina equipada, jardín.\n$18,000 MXN mensuales, todos los servicios incluidos.\n\nPara más información: 55 2578-0280 Mariano.",
+    "rental_score": 35,
+    "rental_keywords": ["$", "en alquiler", "mensual"],
+    "timestamp": "2025-04-10T09:00:00+00:00",
+    "sent_at": null,
+    "type": "text",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": null,
+    "media_title": null
+  },
+  {
+    "id": 1003,
+    "text": "Long term rental! Casa Avellana in Pescadero\n\nFully furnished, 1 bedroom, 1 bathroom, rooftop, patio.\nThe monthly cost will be $17,000 MXN. Includes water and Wifi.\nSend private message for more information",
+    "rental_score": 33,
+    "rental_keywords": ["habitación", "room", "bedroom", "rent"],
+    "timestamp": "2024-06-01T21:05:17+00:00",
+    "sent_at": null,
+    "type": "text",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": null,
+    "media_title": null
+  },
+  {
+    "id": 1004,
+    "text": null,
+    "rental_score": 28,
+    "rental_keywords": ["casita", "rent", "available"],
+    "timestamp": "2026-04-01T18:00:11+00:00",
+    "sent_at": "2026-04-01T18:00:12+00:00",
+    "type": "image",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": "fixture_photo.jpg",
+    "media_title": "Casita en renta con todos los servicios incluidos disponible a partir del 12 de Abril.\n10 mil pesos al mes + deposito\nContrato de 6 meses.\n612-202-1988"
+  },
+  {
+    "id": 1005,
+    "text": "Surfboard for sale, great condition! $200, call me.",
+    "rental_score": 10,
+    "rental_keywords": ["$", "call me"],
+    "timestamp": "2025-03-01T10:00:00+00:00",
+    "sent_at": null,
+    "type": "text",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": null,
+    "media_title": null
+  },
+  {
+    "id": 1006,
+    "text": "Beautiful penthouse for rent in Todos Santos! $3,500/month, 3 bedrooms, ocean view.",
+    "rental_score": 30,
+    "rental_keywords": ["for rent", "bedroom", "rent"],
+    "timestamp": "2025-07-15T12:00:00+00:00",
+    "sent_at": null,
+    "type": "text",
+    "from_jid": "17069686133-1605817204@g.us",
+    "phone": "+17069686133",
+    "media_file": null,
+    "media_title": null
+  }
+]
