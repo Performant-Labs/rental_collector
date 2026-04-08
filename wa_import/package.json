@@ -1,19 +1,22 @@
 {
-  "name": "waexport",
+  "name": "wa-import",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "WhatsApp message exporter via Baileys",
+  "type": "module",
   "scripts": {
+    "export": "node baileys_export.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
-    "better-sqlite3": "^12.8.0",
-    "playwright": "^1.59.1",
+    "pino": "^9.0.0",
     "qrcode-terminal": "^0.12.0"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.8.0",
+    "playwright": "^1.59.1"
   }
 }

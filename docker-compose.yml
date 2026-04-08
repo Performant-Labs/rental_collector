@@ -41,5 +41,17 @@ services:
     depends_on:
       - dashboard-api
 
+  wa-exporter:
+    build:
+      context: ./wa_import
+      dockerfile: Dockerfile.baileys
+    volumes:
+      - ./wa_import/.baileys_auth:/app/.baileys_auth
+      - ./wa_import/output:/app/output
+    stdin_open: true    # needed for QR code scan on first run
+    tty: true           # needed for QR code display
+    profiles:
+      - wa               # only runs when explicitly requested
+
 volumes:
   meili_data:
