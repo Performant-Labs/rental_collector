@@ -23,13 +23,9 @@
       .card h3 { margin: 0 0 8px; font-size: 16px; }
       .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; color: #fff; font-weight: 500;
              background: var(--pill-bg, #6b7280); }
-      /* Per-source badge colors — keep in sync with scraper/rental_search.py SOURCE_COLORS */
-      .pill[data-source="airbnb"]      { --pill-bg: #ff385c; }
-      .pill[data-source="craigslist"]   { --pill-bg: #cc4444; }
-      .pill[data-source="todossantos"]  { --pill-bg: #2d6a4f; }
-      .pill[data-source="whatsapp"]     { --pill-bg: #25D366; color: #fff; }
-      .pill[data-source="claude-api"],
-      .pill[data-source="claude-cli"]   { --pill-bg: #6B46C1; }
+      /* Per-source badge colors — auto-generated from shared.config.SOURCE_COLORS */
+      {% if source_colors %}{% for src, color in source_colors.items() %}
+      .pill[data-source="{{ src }}"] { --pill-bg: {{ color }}; }{% endfor %}{% endif %}
       .pagination { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
       .pagination a { text-decoration: none; color: #111827; border: 1px solid #d1d5db; border-radius: 8px; padding: 6px 10px; }
       .alert { border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; font-size: 14px; }

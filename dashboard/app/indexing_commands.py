@@ -87,33 +87,7 @@ def bootstrap_ingest_if_enabled(
     return incremental_upsert(client=client, rentals_dir=rentals_dir)
 
 
-def parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Index rental listings into Meilisearch")
-    parser.add_argument(
-        "--mode",
-        choices=["incremental", "full"],
-        default="incremental",
-        help="Indexing mode",
-    )
-    parser.add_argument(
-        "--rentals-dir",
-        default=str(DEFAULT_RENTALS_DIR),
-        help="Path to rentals data directory",
-    )
-    return parser.parse_args(argv)
 
-
-def run_ingest_command(argv: list[str] | None = None) -> int:
-    args = parse_cli_args(argv)
-    client = MeilisearchIndexClient.from_env()
-    rentals_dir = Path(args.rentals_dir)
-
-    if args.mode == "full":
-        full_reindex(client=client, rentals_dir=rentals_dir)
-    else:
-        incremental_upsert(client=client, rentals_dir=rentals_dir)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(run_ingest_command())
+# NOTE: This module is a library — use `python -m dashboard.app.ingest_runner`
+# as the CLI entry point.  ingest_runner adds the WhatsApp pre-step and a
+# concurrency lock that this module does not provide.

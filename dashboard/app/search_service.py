@@ -149,3 +149,71 @@ def perform_search(
         "selected_filters": {field: safe_filters.get(field, []) for field in FACET_FIELDS},
         "rejected_filters": rejected_filters,
     }
+
+
+# ── Query param validation (moved from main.py) ──────────────────────────────
+
+ALLOWED_SORT_OPTIONS = {"relevance", "price_asc", "price_desc", "recent"}
+MAX_PER_PAGE = 100
+MIN_PER_PAGE = 1
+
+
+def validate_query_params(
+    *,
+    q: str,
+    sort: str,
+    page: int,
+    per_page: int,
+) -> tuple:
+    """Validate and sanitise incoming search parameters.
+
+    Returns (safe_q, safe_sort, safe_page, safe_per_page, issues_dict).
+    """
+    issues: dict[str, str] = {}
+    safe_q = q
+
+    safe_sort = sort
+    if safe_sort not in ALLOWED_SORT_OPTIONS:
+        issues["sort"] = "invalid_sort"
+        safe_sort = "relevance"
+
+    safe_page = page
+    if safe_page < 1:
+        issues["page"] = "out_of_range"
+        safe_page = 1
+
+    safe_per_page = per_page
+    if safe_per_page < MIN_PER_PAGE or safe_per_page > MAX_PER_PAGE:
+        issues["per_page"] = "out_of_range"
+        safe_per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
+
+    return safe_q, safe_sort, safe_page, safe_per_page, issues
+
+
+def fallback_search_payload(
+    *,
+    query: str,
+    sort: str,
+    page: int,
+    per_page: int,
+    facet_filters: dict[str, list[str]],
+    validation_issues: dict[str, str],
+    error_message: str,
+    request_id: str = "",
+) -> dict[str, object]:
+    """Build a search-result-shaped dict for error / timeout scenarios."""
+    return {
+        "query": query,
+        "results": [],
+        "total_hits": 0,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": 0,
+        "sort": sort,
+        "facets": {},
+        "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
+        "rejected_filters": {},
+        "validation_issues": validation_issues,
+        "error_message": error_message,
+        "request_id": request_id,
+    }

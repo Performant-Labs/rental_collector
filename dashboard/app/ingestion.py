@@ -4,19 +4,12 @@ import re
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_RENTALS_DIR = REPO_ROOT / "rentals"
+from shared.config import REPO_ROOT, DEFAULT_RENTALS_DIR
 
-# Strong rental keywords - if a listing has these, it's likely a rental even without price
-_RENTAL_KEYWORDS_STRONG = re.compile(
-    r"\brent\b|\brental\b|\bfor\s+rent\b|\bse\s+renta\b|\bse\s+alquila\b"
-    r"|\bcuarto\b|\bhabitaci[oó]n\b|\bapartment\b|\bbedroom\b"
-    # Additional Spanish phrases common in WhatsApp rental messages
-    r"|\ben\s+renta\b|\ben\s+alquiler\b|\bse\s+arrienda\b|\ben\s+arriendo\b"
-    r"|\bcasita\b|\bdepartamento\b|\bdepto\b|\brec[aá]mara\b"
-    r"|\bdisponible\b|\brenta\s+mensual\b|\balquiler\b",
-    re.I,
-)
+from shared.keywords import RENTAL_KEYWORDS_STRONG
+
+# Backward-compat alias
+_RENTAL_KEYWORDS_STRONG = RENTAL_KEYWORDS_STRONG
 
 
 def discover_listing_folders(rentals_dir: Path = DEFAULT_RENTALS_DIR) -> list[Path]:

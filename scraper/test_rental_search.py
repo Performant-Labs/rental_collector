@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import rental_search as rs
+from shared import config as _config
 
 
 # ── normalise ─────────────────────────────────────────────────────────────────
@@ -117,9 +118,11 @@ class TestScrapeAirbnbLocal(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -368,45 +371,45 @@ class TestSearchWithClaudeCli(unittest.TestCase):
             "description": "", "amenities": [],
         }])
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run")
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run")
     def test_successful_call(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout=self._listing_json(), stderr="")
         result = rs.search_with_claude_cli(user_msg="test query")
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["source"], "claude-cli")
 
-    @patch("rental_search.os.path.isfile", return_value=False)
+    @patch("scraper.llm_search.os.path.isfile", return_value=False)
     def test_binary_not_found(self, _):
         self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run")
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run")
     def test_nonzero_exit_returns_empty(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="auth error")
         self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run",
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run",
            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=120))
     def test_timeout_returns_empty(self, _run, _file):
         self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run", side_effect=FileNotFoundError)
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run", side_effect=FileNotFoundError)
     def test_file_not_found_error(self, _run, _file):
         self.assertEqual(rs.search_with_claude_cli(user_msg="test query"), [])
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run")
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run")
     def test_passes_print_flag(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
         rs.search_with_claude_cli(user_msg="test query")
         args = mock_run.call_args[0][0]
         self.assertIn("--print", args)
 
-    @patch("rental_search.os.path.isfile", return_value=True)
-    @patch("rental_search.subprocess.run")
+    @patch("scraper.llm_search.os.path.isfile", return_value=True)
+    @patch("scraper.llm_search.subprocess.run")
     def test_homebrew_on_path(self, mock_run, _):
         mock_run.return_value = MagicMock(returncode=0, stdout="[]", stderr="")
         rs.search_with_claude_cli(user_msg="test query")
@@ -434,7 +437,7 @@ class TestSearchWithClaudeApi(unittest.TestCase):
         }])
         mock_client = MagicMock()
         mock_client.messages.create.return_value = self._mock_response(data)
-        with patch("rental_search.anthropic") as mock_anthropic:
+        with patch("scraper.llm_search.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = mock_client
             mock_anthropic.APIError = Exception
             result = rs.search_with_claude_api(user_msg="test query")
@@ -451,7 +454,7 @@ class TestSearchWithClaudeApi(unittest.TestCase):
     def test_api_error_returns_empty(self):
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = Exception("API error")
-        with patch("rental_search.anthropic") as mock_anthropic:
+        with patch("scraper.llm_search.anthropic") as mock_anthropic:
             mock_anthropic.Anthropic.return_value = mock_client
             mock_anthropic.APIError = Exception
             result = rs.search_with_claude_api(user_msg="test query")
@@ -479,7 +482,7 @@ class TestScrapeCreaigslist(unittest.TestCase):
         </ul>
         """
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_parses_listing(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
@@ -489,7 +492,7 @@ class TestScrapeCreaigslist(unittest.TestCase):
         self.assertEqual(result[0]["price_usd"], 1100)
         self.assertEqual(result[0]["source"], "craigslist")
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_canonical_keys(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
@@ -499,17 +502,17 @@ class TestScrapeCreaigslist(unittest.TestCase):
                     "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_filters_over_max(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(price="$2,100"), "html.parser")
         self.assertEqual(rs.scrape_craigslist(), [])
 
-    @patch("rental_search.get_soup", return_value=None)
+    @patch("scraper.scrapers.get_soup", return_value=None)
     def test_network_failure_returns_empty(self, _):
         self.assertEqual(rs.scrape_craigslist(), [])
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_no_matching_items(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup("<ul></ul>", "html.parser")
@@ -535,7 +538,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         </div>
         """
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_parses_rental_item(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
@@ -547,7 +550,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         self.assertIn("612-111-2222", result[0]["contact"])
         self.assertIn("owner@example.com", result[0]["contact"])
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_skips_non_rental_items(self, mock_soup):
         from bs4 import BeautifulSoup
         html = """
@@ -561,7 +564,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         mock_soup.return_value = BeautifulSoup(html, "html.parser")
         self.assertEqual(rs.scrape_todos_santos_cc(), [])
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_filters_over_max_price(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(
@@ -569,11 +572,11 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         )
         self.assertEqual(rs.scrape_todos_santos_cc(), [])
 
-    @patch("rental_search.get_soup", return_value=None)
+    @patch("scraper.scrapers.get_soup", return_value=None)
     def test_network_failure_returns_empty(self, _):
         self.assertEqual(rs.scrape_todos_santos_cc(), [])
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_canonical_keys(self, mock_soup):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
@@ -583,7 +586,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
                     "listing_type", "checkin", "checkout", "scraped", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_matches_on_content_keyword(self, mock_soup):
         """Item with no rental keyword in title but 'rental' in content should be included."""
         from bs4 import BeautifulSoup
@@ -600,7 +603,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["price_usd"], 800)
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_skips_tour_ad_with_different_keyword_substring(self, mock_soup):
         """Regression: 'different' contains 'rent' as a substring — keyword matching must
         use word boundaries so tour/event ads are not falsely matched.
@@ -620,7 +623,7 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         mock_soup.return_value = BeautifulSoup(html, "html.parser")
         self.assertEqual(rs.scrape_todos_santos_cc(), [])
 
-    @patch("rental_search.get_soup")
+    @patch("scraper.scrapers.get_soup")
     def test_accepts_casa_listing_with_price(self, mock_soup):
         """'Casa' + a price is a valid weak match and should still be included."""
         from bs4 import BeautifulSoup
@@ -647,9 +650,11 @@ class TestSaveAndDiff(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -842,9 +847,11 @@ class TestNextIndex(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -876,21 +883,23 @@ class TestSaveListingFolder(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
     def _listing(self, title="Beach Studio", price=950, source="craigslist", url=None):
         return rs.normalise({"title": title, "price_usd": price, "url": url}, source)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_creates_folder(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         self.assertTrue(folder.is_dir())
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_writes_info_json(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         info_path = folder / "info.json"
@@ -898,7 +907,7 @@ class TestSaveListingFolder(unittest.TestCase):
         data = json.loads(info_path.read_text())
         self.assertEqual(data["title"], "Beach Studio")
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_info_json_has_canonical_keys(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         data = json.loads((folder / "info.json").read_text())
@@ -908,7 +917,7 @@ class TestSaveListingFolder(unittest.TestCase):
                     "photo_url"}
         self.assertEqual(set(data.keys()), expected)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_writes_listing_html(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         html_path = folder / "listing.html"
@@ -916,7 +925,7 @@ class TestSaveListingFolder(unittest.TestCase):
         html = html_path.read_text()
         self.assertIn("Beach Studio", html)
 
-    @patch("rental_search.fetch_photos", return_value=["photo_01.jpg"])
+    @patch("scraper.folder_ops.fetch_photos", return_value=["photo_01.jpg"])
     def test_fetches_photos_when_url_present(self, mock_fetch):
         listing = self._listing(url="https://craigslist.org/abc")
         folder = rs.save_listing_folder(listing, 1)
@@ -924,12 +933,12 @@ class TestSaveListingFolder(unittest.TestCase):
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["localPhotos"], ["photo_01.jpg"])
 
-    @patch("rental_search.fetch_photos")
+    @patch("scraper.folder_ops.fetch_photos")
     def test_skips_photo_fetch_when_no_url(self, mock_fetch):
         rs.save_listing_folder(self._listing(url=None), 1)
         mock_fetch.assert_not_called()
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_folder_name_includes_source_and_price(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         self.assertIn("craigslist", folder.name)
@@ -944,48 +953,48 @@ class TestIsListingActive(unittest.TestCase):
         r.text = body
         return r
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_active_listing_returns_true(self, mock_get):
         mock_get.return_value = self._mock_response(200, "Great studio for rent")
         self.assertTrue(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_404_returns_false(self, mock_get):
         mock_get.return_value = self._mock_response(404, "Not Found")
         self.assertFalse(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_deleted_craigslist_post(self, mock_get):
         mock_get.return_value = self._mock_response(
             200, "This posting has been deleted by its author."
         )
         self.assertFalse(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_expired_craigslist_post(self, mock_get):
         mock_get.return_value = self._mock_response(
             200, "This posting has expired."
         )
         self.assertFalse(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_flagged_craigslist_post(self, mock_get):
         mock_get.return_value = self._mock_response(
             200, "This posting has been flagged for removal."
         )
         self.assertFalse(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_no_longer_available(self, mock_get):
         mock_get.return_value = self._mock_response(200, "This listing is no longer available.")
         self.assertFalse(rs.is_listing_active("https://example.com/listing"))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_case_insensitive(self, mock_get):
         mock_get.return_value = self._mock_response(200, "THIS POSTING HAS BEEN DELETED")
         self.assertFalse(rs.is_listing_active("https://craigslist.org/abc"))
 
-    @patch("rental_search.requests.get", side_effect=Exception("timeout"))
+    @patch("scraper.folder_ops.requests.get", side_effect=Exception("timeout"))
     def test_network_error_returns_true(self, _):
         # Network errors should not suppress a listing
         self.assertTrue(rs.is_listing_active("https://craigslist.org/abc"))
@@ -994,7 +1003,7 @@ class TestIsListingActive(unittest.TestCase):
         self.assertTrue(rs.is_listing_active(None))
         self.assertTrue(rs.is_listing_active(""))
 
-    @patch("rental_search.requests.get")
+    @patch("scraper.folder_ops.requests.get")
     def test_partial_phrase_does_not_trigger(self, mock_get):
         # "a posting has been deleted" doesn't contain "this posting has been deleted"
         mock_get.return_value = self._mock_response(
@@ -1010,9 +1019,11 @@ class TestScanExisting(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -1084,9 +1095,11 @@ class TestUpdateListingFolder(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -1136,9 +1149,11 @@ class TestSaveListingFolders(unittest.TestCase):
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
+        _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
+        _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
         shutil.rmtree(self._tmp, ignore_errors=True)
 
@@ -1153,21 +1168,21 @@ class TestSaveListingFolders(unittest.TestCase):
         (folder / "listing.html").write_text("<html></html>", encoding="utf-8")
         return folder
 
-    @patch("rental_search.is_listing_active", return_value=True)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=True)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_creates_new_folder(self, _fetch, _active):
         rs.save_listing_folders([self._listing("New Place", url="https://craigslist.org/new")])
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 1)
 
-    @patch("rental_search.is_listing_active", return_value=True)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=True)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_skips_identical_listing(self, _fetch, _active):
         self._write_existing("Same Place", "https://craigslist.org/1", 900)
         rs.save_listing_folders([self._listing("Same Place", url="https://craigslist.org/1", price=900)])
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 1)
 
-    @patch("rental_search.is_listing_active", return_value=True)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=True)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_updates_when_price_changes(self, _fetch, _active):
         folder = self._write_existing("Same Place", "https://craigslist.org/1", 900)
         rs.save_listing_folders([self._listing("Same Place", url="https://craigslist.org/1", price=1050)])
@@ -1175,20 +1190,20 @@ class TestSaveListingFolders(unittest.TestCase):
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["price_usd"], 1050)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_dedupes_by_title_when_no_url(self, _):
         self._write_existing("No URL Place", None, 900)
         rs.save_listing_folders([self._listing("No URL Place", url=None, price=900)])
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 1)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_updates_by_title_when_no_url_and_price_changes(self, _):
         folder = self._write_existing("No URL Place", None, 900)
         rs.save_listing_folders([self._listing("No URL Place", url=None, price=1100)])
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["price_usd"], 1100)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_listings_without_url_not_deduped_by_url(self, _):
         listings = [
             self._listing("Place A", url=None),
@@ -1197,14 +1212,14 @@ class TestSaveListingFolders(unittest.TestCase):
         rs.save_listing_folders(listings)
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 2)
 
-    @patch("rental_search.is_listing_active", return_value=False)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=False)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_inactive_new_listing_not_saved(self, _fetch, _active):
         rs.save_listing_folders([self._listing("Dead Listing", url="https://x.com/dead")])
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 0)
 
-    @patch("rental_search.is_listing_active", return_value=False)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=False)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_inactive_price_change_not_updated(self, _fetch, _active):
         folder = self._write_existing("Old Place", "https://x.com/1", 900)
         rs.save_listing_folders([self._listing("Old Place", url="https://x.com/1", price=1100)])
@@ -1212,16 +1227,16 @@ class TestSaveListingFolders(unittest.TestCase):
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["price_usd"], 900)
 
-    @patch("rental_search.is_listing_active", return_value=True)
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.is_listing_active", return_value=True)
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_active_listing_is_saved(self, _fetch, _active):
         rs.save_listing_folders([self._listing("Active Place", url="https://x.com/live")])
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 1)
 
-    @patch("rental_search.fetch_photos", return_value=[])
+    @patch("scraper.folder_ops.fetch_photos", return_value=[])
     def test_no_url_listing_saved_without_active_check(self, _fetch):
         # Listings without a URL skip the HTTP check and are always saved
-        with patch("rental_search.requests.get") as mock_get:
+        with patch("scraper.folder_ops.requests.get") as mock_get:
             rs.save_listing_folders([self._listing("No URL", url=None)])
             mock_get.assert_not_called()
         self.assertEqual(len(list(self._tmp.glob("craigslist-*/"))), 1)

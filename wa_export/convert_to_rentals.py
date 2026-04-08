@@ -40,6 +40,24 @@ from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
+# Ensure the project root is on sys.path so that `shared` is importable
+# regardless of how this script is invoked.
+_PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
+# ── Shared imports ────────────────────────────────────────────────────────────
+from shared.config import MAX_USD, TODAY, DEFAULT_RENTALS_DIR
+from shared.pricing import parse_price_usd
+from shared.listing_io import slugify, folder_name, listing_key
+from shared.listing_html import generate_listing_html
+
+# Backward-compat aliases so tests using cr._parse_price_usd etc. still work
+_parse_price_usd = parse_price_usd
+_slugify = slugify
+_folder_name = folder_name
+_listing_key = listing_key
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
 _HERE        = Path(__file__).parent                         # wa_export/
@@ -47,15 +65,12 @@ _PROJECT     = _HERE.parent                                  # Todos Santos Rent
 
 WA_RENTALS_PATH = _HERE / "output" / "rentals.json"
 WA_MEDIA_DIR    = _HERE / "output" / "media"
-RESULTS_DIR     = _PROJECT / "rentals"
-
-TODAY  = date.today().isoformat()
+RESULTS_DIR     = DEFAULT_RENTALS_DIR
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 SOURCE    = "whatsapp"
 MIN_SCORE = 15
-MAX_USD   = 2000          # must match rental_search.py
 
 # ── Regex helpers ─────────────────────────────────────────────────────────────
 
@@ -104,25 +119,7 @@ _LOCATION_RE = re.compile(
 )
 
 
-# ── Price parsing (mirrors rental_search._parse_price_usd) ───────────────────
-
-def _parse_price_usd(text: str) -> Optional[int]:
-    """Extract a monthly USD price from arbitrary text. Returns None if unclear."""
-    if not text:
-        return None
-    text = text.replace(",", "")
-    m = re.search(r"\$\s*(\d{3,6})", text)
-    if m:
-        val = int(m.group(1))
-        if val < 100:
-            return None
-        if val > 4_000:
-            return round(val / 17.5)
-        return val
-    m = re.search(r"(\d{4,6})\s*(?:mxn|pesos?)", text, re.I)
-    if m:
-        return round(int(m.group(1)) / 17.5)
-    return None
+# _parse_price_usd — imported from shared.pricing (see top of file).
 
 
 # ── Dedup ─────────────────────────────────────────────────────────────────────
@@ -288,19 +285,8 @@ def load_and_filter(path: Path, min_score: int) -> List[dict]:
     return listings
 
 
-# ── Slugify / folder naming (mirrors rental_search.py) ───────────────────────
-
-def _slugify(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text)
-    return text.strip("-")[:40]
-
-
-def _folder_name(listing: dict, index: int) -> str:
-    slug  = _slugify(listing.get("title") or "listing")
-    price = listing.get("price_usd")
-    price_part = f"{price}usd" if price else "noprice"
-    return f"{SOURCE}-{index:02d}-{slug}-{price_part}"
+# _slugify, _folder_name — imported from shared.listing_io (see top of file).
+# Note: _folder_name here uses SOURCE constant by wrapping shared.listing_io.folder_name.
 
 
 def _scan_existing() -> dict:
@@ -355,30 +341,12 @@ def _copy_media(listing: dict, dest_folder: Path) -> List[str]:
     return ["photo_01.jpg"]
 
 
-# ── HTML generation (reuses rental_search logic via import) ──────────────────
+# ── HTML generation ────────────────────────────────────────────────────
+# generate_listing_html imported from shared.listing_html (see top of file).
 
 def _generate_listing_html(listing: dict) -> str:
-    """
-    Delegate to rental_search.generate_listing_html() so styling stays
-    consistent across all sources.
-    """
-    # Import lazily to avoid hard-wiring the path at module load time
-    sys.path.insert(0, str(_PROJECT / "scraper"))
-    try:
-        import rental_search as rs   # type: ignore
-        return rs.generate_listing_html(listing)
-    except ImportError:
-        # Minimal fallback if rental_search isn't importable (e.g. missing deps)
-        title = listing.get("title", "Listing")
-        desc  = listing.get("description", "")
-        price = listing.get("price_usd")
-        price_str = f"${price}/mo" if price else "—"
-        return (
-            f"<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-            f"<title>{title}</title></head><body>"
-            f"<h1>{title}</h1><p>{price_str}</p><pre>{desc}</pre>"
-            f"</body></html>"
-        )
+    """Thin wrapper around shared.listing_html.generate_listing_html()."""
+    return generate_listing_html(listing)
 
 
 # ── Folder creation ───────────────────────────────────────────────────────────
@@ -421,9 +389,7 @@ def save_listing_folder(listing: dict, index: int, existing: dict):
 
 # ── Save / diff ───────────────────────────────────────────────────────────────
 
-def _listing_key(listing: dict) -> str:
-    title = re.sub(r"\W+", " ", (listing.get("title") or "")).lower().strip()[:60]
-    return f"{listing.get('source', '')}|{title}"
+# _listing_key — imported from shared.listing_io (see top of file).
 
 
 def save_results(listings: List[dict], create_folders: bool = True) -> Path:

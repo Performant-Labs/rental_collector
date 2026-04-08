@@ -17,7 +17,7 @@ DEFAULT_LOCK_FILE = Path("/tmp/todossantos-dashboard-ingest.lock")
 logger = logging.getLogger(__name__)
 
 # Paths to the WhatsApp pipeline scripts, relative to the repo root
-_REPO_ROOT = Path(__file__).resolve().parents[2]
+from shared.config import REPO_ROOT as _REPO_ROOT
 _WA_DIR       = _REPO_ROOT / "wa_export"
 _WA_SCORER    = _WA_DIR / "4_find_rentals.py"    # messages.json → rentals.json
 _WA_CONVERTER = _WA_DIR / "convert_to_rentals.py" # rentals.json  → rentals/ folders

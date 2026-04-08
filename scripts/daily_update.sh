@@ -44,21 +44,15 @@ else
     log "  Run: python3 wa_export/1_export_messages.py  (requires ChatStorage.sqlite)"
 fi
 
-# ── Phase 2: Move scraper JSON output into rentals/ ──────────────────────────
-log "Phase 2: Moving results to ingestion folder..."
-SCRAPER_JSON=("$PROJECT_ROOT"/scraper/rentals/*.json)
-if [ -e "${SCRAPER_JSON[0]}" ]; then
-    mv "$PROJECT_ROOT"/scraper/rentals/*.json "$PROJECT_ROOT/rentals/"
-    log "  Moved JSON files to rentals/."
-else
-    log "  No new JSON files found to move."
-fi
+# ── Phase 2: (removed) ──────────────────────────────────────────────────────
+# The scraper now writes directly to rentals/ (DEFAULT_RENTALS_DIR from
+# shared/config.py), so no file-move step is needed.
 
 # ── Phase 3: Ingest into Meilisearch ─────────────────────────────────────────
 # ingest_runner automatically calls convert_to_rentals.py --save (WA conversion)
 # before indexing, so no separate WA conversion step is needed here.
 log "Phase 3: Ingesting into Dashboard (Meilisearch)..."
-docker compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner --mode full \
+${COMPOSE_CMD:-docker compose} run --rm dashboard-ingest python -m dashboard.app.ingest_runner --mode full \
     2>&1 | tee -a "$LOG_FILE"
 
 # ── Phase 4: Record completion timestamp ──────────────────────────────────────

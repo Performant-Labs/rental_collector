@@ -10,18 +10,25 @@ from fastapi.templating import Jinja2Templates
 
 from dashboard.app.indexing_commands import bootstrap_ingest_if_enabled
 from dashboard.app.meilisearch_index_client import MeilisearchIndexClient
-from dashboard.app.search_service import FACET_FIELDS, perform_search
+from dashboard.app.search_service import (
+    FACET_FIELDS,
+    perform_search,
+    validate_query_params,
+    fallback_search_payload,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
-REPO_ROOT = BASE_DIR.parent.parent  # dashboard/app -> dashboard -> repo root
+from shared.config import REPO_ROOT, SOURCE_COLORS
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 logger = logging.getLogger("dashboard.app")
 
-ALLOWED_SORT_OPTIONS = {"relevance", "price_asc", "price_desc", "recent"}
-MAX_PER_PAGE = 100
-MIN_PER_PAGE = 1
+
 
 app = FastAPI(title="Todos Santos Rentals Dashboard")
+
+# Singleton Meilisearch client — created once, reused for all requests.
+# Using a module‐level instance keeps connection pooling across requests.
+_search_client = MeilisearchIndexClient.from_env()
 
 # Serve static rental listing files
 app.mount("/rentals", StaticFiles(directory=str(REPO_ROOT / "rentals"), html=True), name="rentals")
@@ -51,8 +58,7 @@ def startup_bootstrap_ingest() -> None:
     if not _bootstrap_enabled():
         return
 
-    client = MeilisearchIndexClient.from_env()
-    bootstrap_ingest_if_enabled(enabled=True, client=client)
+    bootstrap_ingest_if_enabled(enabled=True, client=_search_client)
 
 
 @app.get("/health")
@@ -87,6 +93,7 @@ def home(
             "search": search,
             "facet_fields": FACET_FIELDS,
             "last_run": _get_last_run_time(),
+            "source_colors": SOURCE_COLORS,
         },
     )
 
@@ -155,67 +162,12 @@ def partial_pagination(
     )
 
 
-def _parse_facet_filters(request: Request) -> dict[str, list[str]]:
-    facet_filters: dict[str, list[str]] = {}
+
+def _parse_facet_filters(request: Request) -> dict:
+    facet_filters = {}
     for field in FACET_FIELDS:
         facet_filters[field] = request.query_params.getlist(field)
     return facet_filters
-
-
-def _validate_query_params(
-    *,
-    q: str,
-    sort: str,
-    page: int,
-    per_page: int,
-) -> tuple[str, str, int, int, dict[str, str]]:
-    issues: dict[str, str] = {}
-    safe_q = q
-
-    safe_sort = sort
-    if safe_sort not in ALLOWED_SORT_OPTIONS:
-        issues["sort"] = "invalid_sort"
-        safe_sort = "relevance"
-
-    safe_page = page
-    if safe_page < 1:
-        issues["page"] = "out_of_range"
-        safe_page = 1
-
-    safe_per_page = per_page
-    if safe_per_page < MIN_PER_PAGE or safe_per_page > MAX_PER_PAGE:
-        issues["per_page"] = "out_of_range"
-        safe_per_page = max(MIN_PER_PAGE, min(per_page, MAX_PER_PAGE))
-
-    return safe_q, safe_sort, safe_page, safe_per_page, issues
-
-
-def _fallback_search_payload(
-    *,
-    request: Request,
-    query: str,
-    sort: str,
-    page: int,
-    per_page: int,
-    facet_filters: dict[str, list[str]],
-    validation_issues: dict[str, str],
-    error_message: str,
-) -> dict[str, object]:
-    return {
-        "query": query,
-        "results": [],
-        "total_hits": 0,
-        "page": page,
-        "per_page": per_page,
-        "total_pages": 0,
-        "sort": sort,
-        "facets": {},
-        "selected_filters": {field: facet_filters.get(field, []) for field in FACET_FIELDS},
-        "rejected_filters": {},
-        "validation_issues": validation_issues,
-        "error_message": error_message,
-        "request_id": getattr(request.state, "request_id", ""),
-    }
 
 
 def _run_search(
@@ -226,17 +178,14 @@ def _run_search(
     page: int,
     per_page: int,
 ):
-    safe_q, safe_sort, safe_page, safe_per_page, validation_issues = _validate_query_params(
-        q=q,
-        sort=sort,
-        page=page,
-        per_page=per_page,
+    safe_q, safe_sort, safe_page, safe_per_page, validation_issues = validate_query_params(
+        q=q, sort=sort, page=page, per_page=per_page,
     )
     facet_filters = _parse_facet_filters(request)
-    client = MeilisearchIndexClient.from_env()
+    request_id = getattr(request.state, "request_id", "")
     try:
         result = perform_search(
-            client=client,
+            client=_search_client,
             query=safe_q,
             facet_filters=facet_filters,
             sort_option=safe_sort,
@@ -245,36 +194,27 @@ def _run_search(
         )
         result["validation_issues"] = validation_issues
         result["error_message"] = ""
-        result["request_id"] = getattr(request.state, "request_id", "")
+        result["request_id"] = request_id
         return result
     except TimeoutError:
-        logger.warning("search_timeout request_id=%s", getattr(request.state, "request_id", ""))
-        return _fallback_search_payload(
-            request=request,
-            query=safe_q,
-            sort=safe_sort,
-            page=safe_page,
-            per_page=safe_per_page,
-            facet_filters=facet_filters,
-            validation_issues=validation_issues,
+        logger.warning("search_timeout request_id=%s", request_id)
+        return fallback_search_payload(
+            query=safe_q, sort=safe_sort, page=safe_page, per_page=safe_per_page,
+            facet_filters=facet_filters, validation_issues=validation_issues,
             error_message="Search temporarily unavailable. Please retry.",
+            request_id=request_id,
         )
     except Exception as e:
-        logger.exception("search_unexpected_error request_id=%s", getattr(request.state, "request_id", ""))
+        logger.exception("search_unexpected_error request_id=%s", request_id)
         error_str = str(e)
         if "404" in error_str and ("index" in error_str.lower() or "not found" in error_str.lower()):
             friendly_message = "Search index not found. Run ingestion first with: docker compose run --rm dashboard-ingest python -m dashboard.app.ingest_runner"
         else:
             friendly_message = "Search temporarily unavailable. Please retry later."
-        return _fallback_search_payload(
-            request=request,
-            query=safe_q,
-            sort=safe_sort,
-            page=safe_page,
-            per_page=safe_per_page,
-            facet_filters=facet_filters,
-            validation_issues=validation_issues,
-            error_message=friendly_message,
+        return fallback_search_payload(
+            query=safe_q, sort=safe_sort, page=safe_page, per_page=safe_per_page,
+            facet_filters=facet_filters, validation_issues=validation_issues,
+            error_message=friendly_message, request_id=request_id,
         )
 
 
