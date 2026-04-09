@@ -1,24 +1,22 @@
 /**
- * recover_media.mjs — Recover historical WA images using existing Baileys auth.
+ * recover_media.mjs — Recover historical WA images using Baileys.
  *
- * No QR scan required — uses the existing .baileys_auth/ from the nightly
- * pipeline.
+ * TWO MODES:
  *
- * STRATEGY:
- *   When Baileys reconnects with saved credentials, WhatsApp pushes a recent-
- *   history sync (messaging-history.set) covering roughly the last 90 days of
- *   messages, each with fresh mediaKey included in the proto. This script:
- *     1. Connects with saved auth (no QR needed)
- *     2. Listens for messaging-history.set events
- *     3. For each image message in the target group, calls downloadMediaMessage()
- *        while the media key is fresh in memory
- *     4. Saves as {stanza_id}.jpg  (auto-linked by convert_to_rentals.py)
- *     5. Exits after history sync completes + 30s wait for stragglers
+ *   node recover_media.mjs
+ *     Default: uses existing .baileys_auth/ (no QR needed).
+ *     Gets images from whatever recent history WA pushes on reconnect.
  *
- * USAGE:
- *   node wa_import/recover_media.mjs
+ *   node recover_media.mjs --fresh
+ *     Full historical recovery: backs up .baileys_auth/, deletes it,
+ *     and links as a NEW device (one QR scan required).
+ *     WhatsApp sends the complete message history with fresh media keys.
+ *     After the QR scan, the new credentials REPLACE the old link — no
+ *     additional linked-device slot is consumed.  The nightly pipeline
+ *     automatically picks up the new credentials on its next run.
+ *     Expect to receive 10–30+ batches covering years of group history.
  *
- * After it finishes:
+ * After either mode finishes:
  *   python -m wa_import.convert_to_rentals --save
  *   python -m dashboard.app.ingest_runner --mode full
  */
@@ -31,6 +29,7 @@ import makeWASocket, {
   Browsers,
   getContentType,
 } from "@whiskeysockets/baileys";
+import qrcode from "qrcode-terminal";
 import pino from "pino";
 import fs from "fs";
 import path from "path";
@@ -38,25 +37,26 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const TARGET_GROUP_JID = "17069686133-1605817204@g.us";
-const AUTH_DIR    = path.join(__dirname, ".baileys_auth");
-const MEDIA_DIR   = path.join(__dirname, "output", "media");
-const LOG_PATH    = path.join(__dirname, "output", "recover_media_log.json");
-const MSGS_PATH   = path.join(__dirname, "output", "messages.json");
+const TARGET_GROUP_JID   = "17069686133-1605817204@g.us";
+const AUTH_DIR           = path.join(__dirname, ".baileys_auth");
+const AUTH_BACKUP_DIR    = path.join(__dirname, ".baileys_auth_backup");
+const MEDIA_DIR          = path.join(__dirname, "output", "media");
+const LOG_PATH           = path.join(__dirname, "output", "recover_media_log.json");
+const MSGS_PATH          = path.join(__dirname, "output", "messages.json");
 
-const POST_SYNC_WAIT_MS      = 30_000;  // wait after sync for stragglers
-const IMAGE_DOWNLOAD_TIMEOUT = 15_000;  // per-image timeout
+const POST_SYNC_WAIT_MS      = 60_000;   // wait after last batch (ms)
+const IMAGE_DOWNLOAD_TIMEOUT = 20_000;   // per-image timeout
+
+const FRESH_MODE = process.argv.includes("--fresh");
 
 fs.mkdirSync(MEDIA_DIR, { recursive: true });
 
-// ── Load already-downloaded stanza IDs (avoid re-downloading) ────────────────
+// ── Load already-downloaded stanza IDs ───────────────────────────────────────
 function loadAlreadyHave() {
   const have = new Set();
-  // Files from Baileys nightly: {stanza_id}.jpg (hex strings)
   for (const f of fs.readdirSync(MEDIA_DIR)) {
     have.add(path.basename(f, path.extname(f)));
   }
-  // Also check messages.json for media_local_path already set
   if (fs.existsSync(MSGS_PATH)) {
     const msgs = JSON.parse(fs.readFileSync(MSGS_PATH, "utf8"));
     for (const m of msgs) {
@@ -91,55 +91,88 @@ async function tryDownload(msg, alreadyHave, results) {
     fs.writeFileSync(outPath, buf);
     alreadyHave.add(stanzaId);
     results.push({ stanzaId, status: "ok", bytes: buf.length });
-    process.stdout.write(`\r  ✅ ${results.filter(r => r.status === "ok").length} recovered  (${stanzaId.slice(0,12)}…)`);
+    const okCount = results.filter(r => r.status === "ok").length;
+    process.stdout.write(`\r  ✅ ${okCount} recovered  (${stanzaId.slice(0,12)}…)`);
   } catch (err) {
-    const status = err.message === "timeout" ? "timeout"
-      : err.message.includes("403") ? "cdn_expired"
-      : "error";
+    const status = err.message === "timeout"         ? "timeout"
+                 : err.message.includes("403")       ? "cdn_expired"
+                 : err.message.includes("410")       ? "cdn_expired"
+                 : "error";
     results.push({ stanzaId, status, error: err.message });
+  }
+}
+
+function printSummary(results) {
+  const ok      = results.filter(r => r.status === "ok").length;
+  const expired = results.filter(r => r.status === "cdn_expired").length;
+  const timeout = results.filter(r => r.status === "timeout").length;
+  const err     = results.filter(r => r.status === "error" || r.status === "empty").length;
+
+  console.log(`\n\n✅ Done.`);
+  console.log(`   Recovered:        ${ok}`);
+  console.log(`   CDN expired:      ${expired}  (gone from WA servers — can't recover)`);
+  console.log(`   Timed out:        ${timeout}`);
+  console.log(`   Errors:           ${err}`);
+  console.log(`   Output:           ${MEDIA_DIR}`);
+  fs.writeFileSync(LOG_PATH, JSON.stringify(results, null, 2));
+  if (ok > 0) {
+    console.log("\n   Next steps:");
+    console.log("     python -m wa_import.convert_to_rentals --save");
+    console.log("     python -m dashboard.app.ingest_runner --mode full");
   }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log("\n📥 WA Media Recovery (no QR scan needed)");
-  console.log("─────────────────────────────────────────\n");
+  if (FRESH_MODE) {
+    console.log("\n📥 WA Media Recovery — FULL HISTORICAL MODE (--fresh)");
+    console.log("────────────────────────────────────────────────────────");
+    console.log("\n  This will:");
+    console.log("  1. Back up your existing .baileys_auth/ credentials");
+    console.log("  2. Unlink the current device (frees the slot, doesn't add one)");
+    console.log("  3. Show a QR code — scan it to re-link as the same slot");
+    console.log("  4. Download all historical images while WA sends the full sync");
+    console.log("  5. Save new credentials — nightly pipeline uses them automatically\n");
 
-  if (!fs.existsSync(AUTH_DIR) || fs.readdirSync(AUTH_DIR).length === 0) {
-    console.error("❌ No .baileys_auth/ found. Run the nightly pipeline first to set up auth.");
-    process.exit(1);
+    // Back up, then clear auth to force fresh device link
+    if (fs.existsSync(AUTH_DIR)) {
+      if (fs.existsSync(AUTH_BACKUP_DIR)) {
+        fs.rmSync(AUTH_BACKUP_DIR, { recursive: true });
+      }
+      fs.cpSync(AUTH_DIR, AUTH_BACKUP_DIR, { recursive: true });
+      console.log(`  ✅ Backed up .baileys_auth/ → .baileys_auth_backup/`);
+      fs.rmSync(AUTH_DIR, { recursive: true });
+      console.log(`  🗑️  Cleared .baileys_auth/ to force fresh device link\n`);
+    }
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+
+  } else {
+    console.log("\n📥 WA Media Recovery (existing auth — no QR needed)");
+    console.log("────────────────────────────────────────────────────");
+    if (!fs.existsSync(AUTH_DIR) || fs.readdirSync(AUTH_DIR).length === 0) {
+      console.error("❌ No .baileys_auth/ found.");
+      console.error("   Run the nightly pipeline first, or use --fresh to set up from scratch.");
+      process.exit(1);
+    }
   }
 
   const alreadyHave = loadAlreadyHave();
-  console.log(`  Already have: ${alreadyHave.size} stanza IDs on disk or in messages.json`);
+  console.log(`  Already have: ${alreadyHave.size} images on disk`);
 
   const results = [];
   let historySyncDone = false;
   let exitTimer = null;
   let batchCount = 0;
+  let totalGroupImages = 0;
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
-  console.log(`  Baileys version: ${version.join(".")}`);
-  console.log(`  Connecting with saved auth (no QR needed)…\n`);
+  console.log(`  Baileys: ${version.join(".")}\n`);
 
   function scheduleExit() {
     if (exitTimer) clearTimeout(exitTimer);
     exitTimer = setTimeout(() => {
-      const ok    = results.filter(r => r.status === "ok").length;
-      const skip  = results.filter(r => r.status === "timeout" || r.status === "cdn_expired").length;
-      const err   = results.filter(r => r.status === "error" || r.status === "empty").length;
-      console.log(`\n\n✅ Done.`);
-      console.log(`   Recovered:   ${ok}`);
-      console.log(`   CDN expired: ${skip}  (permanently gone from WA servers)`);
-      console.log(`   Errors:      ${err}`);
-      console.log(`   Output dir:  ${MEDIA_DIR}`);
-      fs.writeFileSync(LOG_PATH, JSON.stringify(results, null, 2));
-      if (ok > 0) {
-        console.log("\n   Next steps:");
-        console.log("     python -m wa_import.convert_to_rentals --save");
-        console.log("     python -m dashboard.app.ingest_runner --mode full");
-      }
+      printSummary(results);
       process.exit(0);
     }, POST_SYNC_WAIT_MS);
   }
@@ -159,32 +192,55 @@ async function main() {
 
   sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
     if (qr) {
-      // Shouldn't happen with saved auth, but surface it clearly if it does
-      console.log("⚠️  QR code requested — your saved auth may have expired.");
-      console.log("   Re-run the nightly pipeline (docker compose up wa-exporter) to refresh auth.");
-      process.exit(1);
+      if (FRESH_MODE) {
+        console.log("📱 Scan with WhatsApp → Settings → Linked Devices → Link a Device:\n");
+        qrcode.generate(qr, { small: true });
+        console.log("\n   (Waiting for scan…)");
+      } else {
+        // In normal mode, QR means auth expired — guide user
+        console.log("⚠️  Auth expired. Run with --fresh to re-link:");
+        console.log("   node wa_import/recover_media.mjs --fresh");
+        process.exit(1);
+      }
     }
     if (connection === "open") {
-      console.log("  ✅ Connected. Waiting for WA history sync…\n");
+      if (FRESH_MODE) {
+        console.log("\n✅ Linked! Waiting for WA to send full history sync…");
+        console.log("   (Large groups can take 10–30 minutes)\n");
+      } else {
+        console.log("  ✅ Connected. Waiting for history…\n");
+      }
     }
     if (connection === "close") {
       const code = lastDisconnect?.error?.output?.statusCode;
       if (code === DisconnectReason.loggedOut) {
-        console.log("❌ Logged out. Run nightly pipeline to re-link.");
+        if (FRESH_MODE) {
+          console.log("❌ Logged out during re-link. Restoring backup auth…");
+          if (fs.existsSync(AUTH_BACKUP_DIR)) {
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+            fs.cpSync(AUTH_BACKUP_DIR, AUTH_DIR, { recursive: true });
+            console.log("   Restored. Nightly pipeline will continue working.");
+          }
+        }
         process.exit(1);
       }
-      // Other disconnects — don't retry, just exit cleanly
-      console.log("  ℹ️  Disconnected. Saving results…");
+      // Other disconnect — save and exit cleanly
       fs.writeFileSync(LOG_PATH, JSON.stringify(results, null, 2));
+      if (historySyncDone) printSummary(results);
       process.exit(0);
     }
   });
 
-  // ── History sync (bulk) ──────────────────────────────────────────────────
+  // ── History sync batches ─────────────────────────────────────────────────
   sock.ev.on("messaging-history.set", async ({ messages, isLatest }) => {
     batchCount++;
     const groupMsgs = messages.filter(m => m.key?.remoteJid === TARGET_GROUP_JID);
-    console.log(`  📦 Batch #${batchCount}: ${messages.length} total, ${groupMsgs.length} in group`);
+    const imgMsgs   = groupMsgs.filter(m => getContentType(m.message || {}) === "imageMessage");
+    totalGroupImages += imgMsgs.length;
+
+    process.stdout.write(
+      `\r  📦 Batch #${batchCount} (+${imgMsgs.length} images, ${totalGroupImages} total)   `
+    );
 
     for (const msg of groupMsgs) {
       await tryDownload(msg, alreadyHave, results);
@@ -192,12 +248,15 @@ async function main() {
 
     if (isLatest) {
       historySyncDone = true;
-      console.log(`\n  ✅ History sync complete (${batchCount} batches).`);
+      console.log(`\n\n  ✅ History sync complete — ${batchCount} batches, ${totalGroupImages} group images seen.`);
       scheduleExit();
+    } else {
+      // Reset timer on each batch — don't exit mid-sync
+      if (exitTimer) { clearTimeout(exitTimer); exitTimer = null; }
     }
   });
 
-  // ── Live messages that arrive while connected ────────────────────────────
+  // ── Live messages ────────────────────────────────────────────────────────
   sock.ev.on("messages.upsert", async ({ messages }) => {
     for (const msg of messages) {
       if (msg.key?.remoteJid !== TARGET_GROUP_JID) continue;
@@ -206,12 +265,12 @@ async function main() {
     if (historySyncDone) scheduleExit();
   });
 
-  // Safety timeout: 30 minutes
+  // Safety timeout: 45 minutes
   setTimeout(() => {
-    console.log("\n⏰ 30-minute safety timeout. Saving and exiting…");
-    fs.writeFileSync(LOG_PATH, JSON.stringify(results, null, 2));
+    console.log("\n⏰ 45-minute safety timeout.");
+    printSummary(results);
     process.exit(0);
-  }, 30 * 60 * 1000);
+  }, 45 * 60 * 1000);
 }
 
 main().catch(err => {
