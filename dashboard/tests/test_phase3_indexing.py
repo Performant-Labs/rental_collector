@@ -72,6 +72,9 @@ class FakeIndexClient:
         self.calls.append("clear")
         return 102
 
+    def clear_documents_and_wait(self) -> None:
+        self.calls.append("clear")
+
     def upsert_documents(self, documents: list[dict[str, Any]]) -> int:
         self.calls.append("upsert")
         self.upsert_payloads.append(documents)

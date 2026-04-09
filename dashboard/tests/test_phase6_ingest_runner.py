@@ -85,7 +85,7 @@ def test_cli_skip_wa_import_flag_defaults_false():
 
 
 def test_cli_skip_wa_import_flag_can_be_set():
-    args = ingest_runner.parse_scheduler_args(["--skip-wa-export"])
+    args = ingest_runner.parse_scheduler_args(["--skip-wa-import"])
     assert args.skip_wa_import is True
 
 

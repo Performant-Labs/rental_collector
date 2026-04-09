@@ -40,6 +40,10 @@ from datetime import date
 from pathlib import Path
 from typing import List, Optional
 
+# Ensure Unicode characters (→, ≥, etc.) don't crash on Windows cp1252 terminals.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 # Ensure the project root is on sys.path so that `shared` is importable
 # regardless of how this script is invoked.
 _PROJECT_ROOT = str(Path(__file__).resolve().parents[1])

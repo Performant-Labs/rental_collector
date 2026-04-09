@@ -19,6 +19,9 @@ class InMemorySearchClient:
         self.documents = []
         return 2
 
+    def clear_documents_and_wait(self) -> None:
+        self.documents = []
+
     def upsert_documents(self, documents):
         by_id = {doc["id"]: doc for doc in self.documents}
         for doc in documents:

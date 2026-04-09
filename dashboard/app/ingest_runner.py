@@ -104,6 +104,7 @@ def run_wa_import_conversion(min_score: int = _WA_MIN_SCORE) -> bool:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=120,
             cwd=str(_REPO_ROOT),
         )
