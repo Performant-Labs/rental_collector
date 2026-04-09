@@ -122,6 +122,7 @@ class TestScrapeAirbnbLocal(unittest.TestCase):
         _config.DEFAULT_RENTALS_DIR = self._tmp
 
     def tearDown(self):
+        self._archive_patcher.stop()
         rs.RESULTS_DIR = self._orig_dir
         _config.DEFAULT_RENTALS_DIR = self._orig_dir
         import shutil
@@ -1155,10 +1156,17 @@ class TestSaveListingFolders(unittest.TestCase):
 
     def setUp(self):
         import tempfile
+        from unittest.mock import patch as _patch
         self._tmp = Path(tempfile.mkdtemp())
         self._orig_dir = rs.RESULTS_DIR
         rs.RESULTS_DIR = self._tmp
         _config.DEFAULT_RENTALS_DIR = self._tmp
+        # Prevent the archiver from touching any directory during these tests.
+        # Archiving behaviour is covered by test_archiver.py.
+        self._archive_patcher = _patch(
+            "scraper.folder_ops.archive_gone_listings", return_value={}
+        )
+        self._archive_patcher.start()
 
     def tearDown(self):
         rs.RESULTS_DIR = self._orig_dir
