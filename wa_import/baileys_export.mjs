@@ -258,6 +258,7 @@ async function main() {
   let exitTimer = null;
   let exitLogShown = false;
   let reconnectCount = 0;
+  let lastOpenTime = 0;
   const MAX_RECONNECTS = 5;
 
   console.log(`📋 Existing messages: ${existing.size.toLocaleString()}`);
@@ -344,14 +345,20 @@ async function main() {
       if (connection === "open") {
         console.log("✅ Connected! Waiting for history sync…");
         console.log("   (Large groups can take 10–30 minutes)\n");
-        reconnectCount = 0;  // Reset on successful connection
+        lastOpenTime = Date.now();
       }
       if (connection === "close") {
         const code = lastDisconnect?.error?.output?.statusCode;
         if (code !== DisconnectReason.loggedOut) {
+          // Only reset counter if last connection lasted > 30s (real session, not throttle bounce)
+          const uptime = lastOpenTime ? Date.now() - lastOpenTime : 0;
+          if (uptime > 30_000) {
+            reconnectCount = 0;
+          }
           reconnectCount++;
           if (reconnectCount > MAX_RECONNECTS) {
-            console.log(`❌ Too many reconnect attempts (${MAX_RECONNECTS}). Saving and exiting…`);
+            console.log(`❌ Too many rapid reconnects (${MAX_RECONNECTS}). WhatsApp may be throttling.`);
+            console.log(`   Wait 10-15 minutes and try again, or the 3am cron will retry.`);
             const total = saveMessages(existing);
             console.log(`   Saved ${total.toLocaleString()} messages (${newCount} new).`);
             process.exit(1);
