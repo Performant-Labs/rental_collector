@@ -10,7 +10,13 @@ from shared.config import TODAY
 
 
 def normalise(raw: dict, source: str) -> dict:
-    """Coerce any listing dict to the canonical schema."""
+    """Coerce any listing dict to the canonical schema.
+
+    ``source`` is the authoritative channel label (e.g. 'craigslist',
+    'airbnb', 'amyrex') established by the caller.  Whatever the raw dict
+    carries in its own 'source' key is intentionally ignored — the LLM
+    should never be able to override the channel of origin.
+    """
     price = raw.get("price_usd") or raw.get("usdPerMonth")
     if price is not None:
         try:
@@ -29,7 +35,7 @@ def normalise(raw: dict, source: str) -> dict:
 
     return {
         "title":        raw.get("title") or "",
-        "source":       source,
+        "source":       source,  # always the caller-supplied channel; never the LLM value
         "price_usd":    price,
         "bedrooms":     raw.get("bedrooms"),
         "location":     raw.get("location") or "Todos Santos",

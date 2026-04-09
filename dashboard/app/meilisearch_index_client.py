@@ -111,6 +111,30 @@ class MeilisearchIndexClient:
         payload = response.json() if hasattr(response, "json") else {}
         return payload.get("taskUid")
 
+    def wait_for_task(self, task_uid: int | None, poll_interval: float = 0.5, max_wait: float = 60.0) -> str:
+        """Poll until a Meilisearch task reaches a terminal state. Returns final status."""
+        import time
+        if task_uid is None:
+            return "skipped"
+        elapsed = 0.0
+        while elapsed < max_wait:
+            resp = self._transport.get(
+                f"{self.host_url}/tasks/{task_uid}",
+                headers=self._headers(),
+                timeout=self.timeout_seconds,
+            )
+            status = (resp.json() if hasattr(resp, "json") else {}).get("status", "unknown")
+            if status in ("succeeded", "failed", "canceled"):
+                return status
+            time.sleep(poll_interval)
+            elapsed += poll_interval
+        return "timeout"
+
+    def clear_documents_and_wait(self) -> str:
+        """Clear all documents and block until Meilisearch confirms the task is done."""
+        task_uid = self.clear_documents()
+        return self.wait_for_task(task_uid)
+
     def upsert_documents(self, documents: list[dict[str, Any]]) -> int | None:
         response = self._transport.post(
             f"{self._index_url()}/documents",

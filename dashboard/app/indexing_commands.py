@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-import argparse
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,47 @@ def _sorted_documents(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(documents, key=lambda item: item.get("id", ""))
 
 
+def _load_previous_ids(rentals_dir: Path) -> set[str]:
+    """Load the set of document IDs from the previous ingest run."""
+    snapshot_path = rentals_dir / ".last_ingest_snapshot.json"
+    try:
+        data = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        return set(data.get("ids", []))
+    except Exception:
+        return set()
+
+
+def _save_ingest_artifacts(rentals_dir: Path, documents: list[dict[str, Any]], previous_ids: set[str]) -> None:
+    """Write snapshot + per-source stats after a successful ingest."""
+    current_ids = [d["id"] for d in documents]
+    new_docs = [d for d in documents if d["id"] not in previous_ids]
+
+    by_source: dict[str, int] = {}
+    for doc in new_docs:
+        src = doc.get("source", "unknown")
+        by_source[src] = by_source.get(src, 0) + 1
+
+    stats = {
+        "run_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "total": len(documents),
+        "total_new": len(new_docs),
+        "by_source": by_source,
+        "first_run": len(previous_ids) == 0,
+    }
+
+    try:
+        snapshot_path = rentals_dir / ".last_ingest_snapshot.json"
+        snapshot_path.write_text(json.dumps({"ids": current_ids}), encoding="utf-8")
+    except Exception:
+        pass
+
+    try:
+        stats_path = rentals_dir / "last_ingest_stats.json"
+        stats_path.write_text(json.dumps(stats, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def ensure_index_and_settings(
     client: MeilisearchIndexClient,
     settings: dict[str, Any] | None = None,
@@ -42,15 +84,18 @@ def full_reindex(
     documents, warnings = build_documents_from_rentals(rentals_dir)
     sorted_documents = _sorted_documents(documents)
 
+    previous_ids = _load_previous_ids(rentals_dir)
+
     ensure_result = ensure_index_and_settings(client)
-    clear_task_uid = client.clear_documents()
+    client.clear_documents_and_wait()  # block until clear is confirmed before upserting
     upsert_task_uid = client.upsert_documents(sorted_documents)
+
+    _save_ingest_artifacts(rentals_dir, sorted_documents, previous_ids)
 
     return {
         "mode": "full_reindex",
         "created_index": ensure_result["created"],
         "settings_task_uid": ensure_result["settings_task_uid"],
-        "clear_task_uid": clear_task_uid,
         "upsert_task_uid": upsert_task_uid,
         "indexed_count": len(sorted_documents),
         "warnings": warnings,

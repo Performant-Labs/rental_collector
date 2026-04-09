@@ -22,10 +22,16 @@ TODAY = date.today().isoformat()
 # ── Appearance ────────────────────────────────────────────────────────────────
 
 SOURCE_COLORS = {
-    "airbnb":      "#ff385c",
+    # Direct scrapers
+    "airbnb":      "#ff385c",   # Airbnb brand red
     "craigslist":  "#cc4444",
-    "todossantos": "#2d6a4f",
-    "claude-api":  "#6B46C1",
-    "claude-cli":  "#6B46C1",
-    "whatsapp":    "#25D366",
+    "todossantos": "#2d6a4f",   # todossantos.cc
+    "whatsapp":    "#25D366",   # WhatsApp brand green
+    # LLM-scraped websites
+    "airbnb-live": "#ff385c",   # live Airbnb search (same colour as airbnb)
+    "amyrex":      "#0891b2",   # amyrextodossantos.com
+    "bajaprops":   "#0891b2",   # bajaproperties.com
+    "baraka":      "#0891b2",   # barakaentodos.com
+    "tsvilla":     "#0891b2",   # todossantosvillarentals.com
+    "pescprop":    "#0891b2",   # pescaderopropertymgmt.com
 }

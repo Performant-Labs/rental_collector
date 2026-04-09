@@ -51,6 +51,7 @@ from shared.config import MAX_USD, TODAY, DEFAULT_RENTALS_DIR
 from shared.pricing import parse_price_usd
 from shared.listing_io import slugify, folder_name, listing_key
 from shared.listing_html import generate_listing_html
+from scraper.normalise import normalise as _normalise_listing
 
 # Backward-compat aliases so tests using cr._parse_price_usd etc. still work
 _parse_price_usd = parse_price_usd
@@ -234,11 +235,18 @@ def _extract_location(text: str) -> str:
 # ── Conversion ────────────────────────────────────────────────────────────────
 
 def convert_message(msg: dict) -> dict:
-    """Map a single scored WA message to the canonical listing schema."""
+    """Map a single scored WA message to the canonical listing schema.
+
+    Routes through scraper.normalise.normalise() so the canonical schema is
+    enforced in one place.  WhatsApp-specific fields (_wa_*) are added after
+    normalisation; photo_url is dropped since WA photos are copied from the
+    media directory rather than fetched via URL.
+    """
     text = msg.get("text") or msg.get("media_title") or ""
-    return {
+
+    # Build the raw dict that normalise() understands
+    raw = {
         "title":        _extract_title(msg),
-        "source":       SOURCE,
         "price_usd":    _parse_price_usd(text),
         "bedrooms":     _extract_bedrooms(text),
         "location":     _extract_location(text),
@@ -251,15 +259,24 @@ def convert_message(msg: dict) -> dict:
         "checkin":      None,
         "checkout":     None,
         "scraped":      _extract_scraped(msg),
-        "localPhotos":  [],          # populated later in Phase 3
-        # Carry WA-specific fields for folder generation / media copy
-        "_wa_score":       msg.get("rental_score"),
-        "_wa_media_file":  msg.get("media_file"),
-        "_wa_media_files": [],        # populated by _find_nearby_images()
-        "_wa_id":          msg.get("id"),
-        "_wa_stanza_id":   msg.get("stanza_id"),
-        "_wa_from_jid":    msg.get("from_jid"),
     }
+
+    # Run through the shared normaliser — source is always "whatsapp"
+    listing = _normalise_listing(raw, SOURCE)
+
+    # WA listings are never fetched via URL photo; drop photo_url from schema
+    listing.pop("photo_url", None)
+
+    # Add WhatsApp-specific fields (stripped from info.json before writing)
+    listing["localPhotos"]      = []          # populated later in Phase 3
+    listing["_wa_score"]        = msg.get("rental_score")
+    listing["_wa_media_file"]   = msg.get("media_file")
+    listing["_wa_media_files"]  = []          # populated by _find_nearby_images()
+    listing["_wa_id"]           = msg.get("id")
+    listing["_wa_stanza_id"]    = msg.get("stanza_id")
+    listing["_wa_from_jid"]     = msg.get("from_jid")
+
+    return listing
 
 
 

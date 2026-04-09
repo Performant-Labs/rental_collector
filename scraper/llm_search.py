@@ -42,7 +42,7 @@ Do NOT include nightly, weekly, or vacation rentals — only monthly rentals ava
 
 For each listing return a JSON object with these exact keys:
   title, price_usd (integer, null if unknown), bedrooms, location (neighborhood if known),
-  source (site name), url (direct link or null), contact (email/phone if shown),
+  url (direct link or null), contact (email/phone if shown),
   description (full listing text), amenities (array, [] if unknown),
   rating (null), listing_type (null), checkin (null), checkout (null),
   scraped (today\u2019s date "{TODAY}"),
@@ -123,7 +123,7 @@ def search_with_litellm(user_msg: str, label: str = "", model: str = "openai/gem
         print("  [litellm] litellm not installed. Run: pip install litellm", file=sys.stderr)
         return []
 
-    tag = f"local-llm/{label}" if label else "local-llm"
+    tag = f"llm/{label}" if label else "llm"
 
     # Extract the URL from the user message
     url_match = re.search(r'https?://\S+', user_msg)
@@ -156,7 +156,7 @@ def search_with_litellm(user_msg: str, label: str = "", model: str = "openai/gem
         print(f"  [{tag}] LLM error: {e}", file=sys.stderr)
         return []
 
-    results = _parse_claude_output(raw, "local-llm")
+    results = _parse_claude_output(raw, label or "local-llm")
     print(f"  [{tag}] \u2192 {len(results)} listing(s)")
     return results
 
@@ -227,7 +227,7 @@ def search_with_claude_cli(user_msg: str, label: str = "") -> List[dict]:
             print(f"  [{tag}] exit {result.returncode}: {detail[:300]}", file=sys.stderr)
         return []
 
-    return _parse_claude_output(result.stdout, "claude-cli")
+    return _parse_claude_output(result.stdout, label or "claude-cli")
 
 
 def search_with_claude_api(user_msg: str, label: str = "") -> List[dict]:
@@ -262,4 +262,4 @@ def search_with_claude_api(user_msg: str, label: str = "") -> List[dict]:
         if hasattr(block, "text"):
             raw = block.text
 
-    return _parse_claude_output(raw, "claude-api")
+    return _parse_claude_output(raw, label or "claude-api")

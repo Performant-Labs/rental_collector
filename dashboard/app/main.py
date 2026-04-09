@@ -1,3 +1,4 @@
+import json
 import os
 import uuid
 from pathlib import Path
@@ -76,6 +77,14 @@ def _get_last_run_time() -> str:
     return "never"
 
 
+def _get_ingest_stats() -> dict:
+    stats_path = REPO_ROOT / "rentals" / "last_ingest_stats.json"
+    try:
+        return json.loads(stats_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
@@ -94,6 +103,7 @@ def home(
             "facet_fields": FACET_FIELDS,
             "last_run": _get_last_run_time(),
             "source_colors": SOURCE_COLORS,
+            "ingest_stats": _get_ingest_stats(),
         },
     )
 

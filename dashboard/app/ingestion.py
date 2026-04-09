@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -50,10 +51,56 @@ def _normalise_location(raw_location: Any) -> str:
     return re.sub(r"\s+", " ", location)
 
 
-def _normalise_source(raw_source: Any, folder_name: str) -> str:
-    if raw_source and str(raw_source).strip():
-        return str(raw_source).strip().lower()
-    return folder_name.split("-", 1)[0].strip().lower()
+# Folder name format: {source}-{NN}-{slug}-{price}
+# Regex extracts everything before the first two-digit index segment.
+_FOLDER_SOURCE_RE = re.compile(r'^(.+?)-(\d{2})-')
+
+# Tool-name prefixes used in older folder names — these are NOT real channels.
+_TOOL_NAME_PREFIXES = {"local-llm", "claude-cli", "claude-api", "ai", "local", "claude"}
+
+# Maps listing URL hostname → real channel label.
+# Used to recover the true source for legacy folders that were named after the
+# tool (local-llm-*, claude-cli-*, ai-*) instead of the originating website.
+_URL_CHANNEL_MAP: list[tuple[str, str]] = [
+    ("airbnb.com",                  "airbnb"),
+    ("amyrextodossantos.com",        "amyrex"),
+    ("bajaproperties.com",           "bajaprops"),
+    ("barakaentodos.com",            "baraka"),
+    ("todossantosvillarentals.com",  "tsvilla"),
+    ("pescaderopropertymgmt.com",    "pescprop"),
+    ("craigslist.org",               "craigslist"),
+    ("todossantos.cc",               "todossantos"),
+]
+
+
+def _channel_from_url(url: str | None) -> str | None:
+    """Return the real channel label for a listing URL, or None if unrecognised."""
+    if not url:
+        return None
+    host = urlparse(url).netloc.lower().replace("www.", "")
+    for domain, channel in _URL_CHANNEL_MAP:
+        if domain in host:
+            return channel
+    return None
+
+
+def _normalise_source(raw_source: Any, folder_name: str, url: str | None = None) -> str:
+    """Return the real channel label for a listing.
+
+    Priority:
+    1. URL-based detection — the listing URL reveals which website it came from
+       and is used whenever the folder prefix is a tool name (legacy folders).
+    2. Folder prefix — for new folders created after the fix, the prefix already
+       is the real channel label (amyrex, bajaprops, whatsapp, craigslist, …).
+    """
+    m = _FOLDER_SOURCE_RE.match(folder_name)
+    prefix = m.group(1).strip().lower() if m else folder_name.split("-", 1)[0].strip().lower()
+
+    if prefix in _TOOL_NAME_PREFIXES:
+        # Legacy folder — recover real channel from the listing URL
+        return _channel_from_url(url) or prefix
+
+    return prefix
 
 
 def _is_valid_document(document: dict[str, Any]) -> bool:
@@ -76,9 +123,9 @@ def _is_valid_document(document: dict[str, Any]) -> bool:
 
 
 def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, Any]:
-    source = _normalise_source(raw.get("source"), folder.name)
-    title = str(raw.get("title") or "").strip()
     url = raw.get("url")
+    source = _normalise_source(raw.get("source"), folder.name, url=url)
+    title = str(raw.get("title") or "").strip()
     # Support both usdPerMonth (camelCase from scraper) and price_usd (snake_case fallback)
     price_raw = raw.get("usdPerMonth") or raw.get("price_usd")
     try:

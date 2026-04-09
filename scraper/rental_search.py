@@ -111,6 +111,20 @@ def merge_listings(all_lists: List[List[dict]]) -> List[dict]:
     merged.sort(key=lambda l: (l.get("price_usd") or 9999))
     return merged
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _merge_by_channel(listings: List[dict], target: dict) -> None:
+    """Group *listings* by their 'source' field and merge into *target* dict.
+
+    Each listing already has the correct channel label stamped by normalise()
+    (e.g. 'amyrex', 'bajaprops', 'airbnb-live').  We split them here so that
+    save_listing_folders() creates correctly-prefixed folders (amyrex-01-…),
+    and the dashboard shows the real origin site rather than the tool name.
+    """
+    for listing in listings:
+        ch = listing.get("source") or "unknown"
+        target.setdefault(ch, []).append(listing)
+
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
@@ -148,8 +162,8 @@ def main():
                     model=args.model,
                 ))
             except Exception as e:
-                print(f"  [local-llm/{task['label']}] error: {e}", file=sys.stderr)
-        source_results["local-llm"] = combined
+                print(f"  [{task['label']}] error: {e}", file=sys.stderr)
+        _merge_by_channel(combined, source_results)
 
     elif not args.no_claude:
         # Cloud LLM mode (Claude API or CLI)
@@ -187,7 +201,7 @@ def main():
                         combined.extend(future.result())
                     except Exception as e:
                         print(f"  [{src_key}/{label}] error: {e}", file=sys.stderr)
-            source_results[src_key] = combined
+            _merge_by_channel(combined, source_results)
 
     # Merge all sources for the combined report
     listings = merge_listings(list(source_results.values()))

@@ -70,9 +70,29 @@
     <main class="page" aria-label="Rental dashboard">
       <div class="header">
         <h1>{{ title }}</h1>
-        <div class="muted">HTMX dashboard over Meilisearch</div>
+        <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:baseline; margin-top:4px;">
+          {% if ingest_stats %}
+            <span class="muted">
+              {{ ingest_stats.total }} listings total
+            </span>
+            {% if not ingest_stats.first_run %}
+              <span class="muted">·</span>
+              <span style="font-size:13px; color: {% if ingest_stats.total_new > 0 %}#059669{% else %}#6b7280{% endif %}; font-weight:500;">
+                {{ ingest_stats.total_new }} new since last run
+              </span>
+              {% if ingest_stats.by_source %}
+                <span style="font-size:12px; color:#9ca3af;">(
+                  {%- for src, count in ingest_stats.by_source.items() %}
+                    <span class="pill" data-source="{{ src }}" style="font-size:11px;">{{ src }} +{{ count }}</span>{% if not loop.last %} {% endif %}
+                  {%- endfor %}
+                )</span>
+              {% endif %}
+            {% endif %}
+            <span class="muted" style="font-size:12px;">· {{ ingest_stats.run_at }}</span>
+          {% endif %}
+        </div>
         {% if last_run %}
-          <div class="muted" style="font-size:12px; margin-top:4px;">Last updated: {{ last_run }}</div>
+          <div class="muted" style="font-size:12px; margin-top:2px;">Last updated: {{ last_run }}</div>
         {% endif %}
       </div>
 

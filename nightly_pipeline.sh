@@ -25,8 +25,10 @@ ${COMPOSE} run --rm dashboard-ingest python -m dashboard.app.ingest_runner --mod
     exit 1
 }
 
-# Step 3: Verify
-DOCS=$(curl -s http://localhost:7700/indexes/rentals_listings/stats 2>/dev/null | grep -o '"numberOfDocuments":[0-9]*' | cut -d: -f2)
+# Step 3: Verify - query from inside the container where meilisearch hostname resolves
+DOCS=$(podman exec rental_collector-dashboard-api-1 \
+    curl -s http://meilisearch:7700/indexes/rentals_listings/stats 2>/dev/null \
+    | grep -o '"numberOfDocuments":[0-9]*' | cut -d: -f2)
 echo "[3/3] Meilisearch has ${DOCS:-unknown} documents indexed"
 
 echo "=== Pipeline completed at $(date -Iseconds) ==="
