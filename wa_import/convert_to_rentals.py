@@ -467,12 +467,19 @@ def save_listing_folder(listing: dict, index: int, existing: dict):
 
     if existing_entry:
         folder = existing_entry["folder"]
-        if existing_entry["price"] == listing.get("price_usd"):
-            return          # unchanged — skip
-        # Price changed: update info.json + listing.html, preserve photos
+        price_unchanged = existing_entry["price"] == listing.get("price_usd")
+        has_photos_already = any(folder.glob("photo_*.jpg"))
+
+        # If price unchanged AND photos already present → truly nothing to do
+        if price_unchanged and has_photos_already:
+            return
+
+        # Price unchanged but no photos yet → fall through to copy photos
+        # Price changed → fall through to update info.json
     else:
         folder = RESULTS_DIR / _folder_name(listing, index)
         folder.mkdir(exist_ok=True)
+        has_photos_already = False
 
     # Copy media (only if not already there)
     if not any(folder.glob("photo_*.jpg")):
