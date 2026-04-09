@@ -14,6 +14,10 @@ import subprocess
 import sys
 from typing import List
 
+# Ensure Unicode output (arrows, em-dashes) doesn't crash on Windows cp1252
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import requests
 
 from shared.config import MAX_USD, TODAY
