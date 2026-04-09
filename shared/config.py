@@ -19,6 +19,14 @@ MAX_USD = 2000          # price ceiling for all listing sources
 MIN_MONTHS = 5          # minimum rental term we're interested in
 TODAY = date.today().isoformat()
 
+# Grace period (days) before a listing that has disappeared is archived.
+# WhatsApp gets 30 days because scrapes are infrequent and the source is
+# unreliable; all other channels use 7 days.
+ARCHIVE_GRACE_DAYS: dict[str, int] = {
+    "default":   7,
+    "whatsapp": 30,
+}
+
 # ── Appearance ────────────────────────────────────────────────────────────────
 
 SOURCE_COLORS = {

@@ -20,6 +20,7 @@ from shared.keywords import RENTAL_KEYWORDS_STRONG
 from shared.listing_io import slugify, folder_name, listing_key
 from shared.listing_html import generate_listing_html
 from scraper.scrapers import get_soup, HEADERS
+from scraper.archiver import archive_gone_listings
 
 
 
@@ -300,6 +301,10 @@ def save_listing_folders(listings: List[dict]):
             changed = update_listing_folder(match["folder"], listing, old_info)
             if changed:
                 updated_count += 1
+
+    # Archive listings that have disappeared (grace period enforcement)
+    active_urls = [l.get("url") for l in listings if l.get("url")]
+    archive_gone_listings(source, active_urls, _config.DEFAULT_RENTALS_DIR)
 
     parts = []
     if new_count:
