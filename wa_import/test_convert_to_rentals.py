@@ -639,5 +639,119 @@ class TestFolderGeneration(unittest.TestCase):
         self.assertIn("noprice", name)
 
 
+# ── Phase 4: _find_nearby_images ─────────────────────────────────────────────
+
+class TestFindNearbyImages(unittest.TestCase):
+    """
+    Covers both filename conventions used by _find_nearby_images:
+
+      1. SQLite / 2_download_media.py → {media_id}.jpg
+      2. Baileys (baileys_export.mjs) → media_local_path = "media/{stanza_id}.jpg"
+
+    Regression test for the bug where Baileys-downloaded images were never
+    linked to listings because media_id is always null for Baileys messages.
+    """
+
+    def setUp(self):
+        self._tmp = Path(tempfile.mkdtemp())
+        self._media_dir = self._tmp / "media"
+        self._media_dir.mkdir()
+        self._patcher = patch.object(cr, "WA_MEDIA_DIR", self._media_dir)
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _write_media(self, filename: str) -> Path:
+        p = self._media_dir / filename
+        p.write_bytes(b"fake-jpeg")
+        return p
+
+    def _listing(self, stanza_id: str) -> dict:
+        return {"_wa_stanza_id": stanza_id, "_wa_media_files": [], "title": "Test"}
+
+    def _messages(self, msgs: list) -> list:
+        """Wrap raw message dicts with required stanza_id."""
+        return msgs
+
+    # ── Convention 1: SQLite media_id ────────────────────────────────────────
+
+    def test_sqlite_media_id_convention_found(self):
+        self._write_media("99999.jpg")
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "IMGMSG", "type_int": 1, "media_id": 99999, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertIn("99999.jpg", result[0]["_wa_media_files"])
+
+    def test_sqlite_media_id_missing_file_excluded(self):
+        # File not on disk — must be excluded
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "IMGMSG", "type_int": 1, "media_id": 1, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertEqual(result[0]["_wa_media_files"], [])
+
+    # ── Convention 2: Baileys media_local_path ────────────────────────────────
+
+    def test_baileys_media_local_path_convention_found(self):
+        self._write_media("AABB1234CCDD.jpg")
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {
+                "stanza_id": "AABB1234CCDD",
+                "type_int": 1,
+                "media_id": None,                               # Baileys always null
+                "media_local_path": "media/AABB1234CCDD.jpg",  # Baileys convention
+            },
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertIn("AABB1234CCDD.jpg", result[0]["_wa_media_files"])
+
+    def test_baileys_media_local_path_missing_file_excluded(self):
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "GHOST", "type_int": 1, "media_id": None,
+             "media_local_path": "media/GHOST.jpg"},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertEqual(result[0]["_wa_media_files"], [])
+
+    def test_both_conventions_in_same_window(self):
+        """Both SQLite and Baileys images near the same listing are both found."""
+        self._write_media("12345.jpg")
+        self._write_media("BADBBBCC.jpg")
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "SQLITEIMG", "type_int": 1, "media_id": 12345, "media_local_path": None},
+            {"stanza_id": "BADBBBCC",  "type_int": 1, "media_id": None,
+             "media_local_path": "media/BADBBBCC.jpg"},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        files = result[0]["_wa_media_files"]
+        self.assertIn("12345.jpg",   files)
+        self.assertIn("BADBBBCC.jpg", files)
+        self.assertEqual(len(files), 2)
+
+    def test_non_image_messages_are_skipped(self):
+        self._write_media("99.jpg")
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "VIDMSG", "type_int": 2, "media_id": 99, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertEqual(result[0]["_wa_media_files"], [])
+
+    def test_listing_without_stanza_id_is_skipped_gracefully(self):
+        msgs = [{"stanza_id": "IMGMSG", "type_int": 1, "media_id": None,
+                 "media_local_path": "media/X.jpg"}]
+        listing_no_stanza = {"_wa_media_files": [], "title": "No stanza"}
+        result = cr._find_nearby_images([listing_no_stanza], msgs)
+        self.assertEqual(result[0]["_wa_media_files"], [])
+
+
 if __name__ == "__main__":
     unittest.main()
