@@ -73,6 +73,23 @@ run_step "WA exporter" \
     ${COMPOSE} --profile wa run --rm wa-exporter \
     || OVERALL="failure"
 
+# ── Step 1.5: Score messages → rentals.json ───────────────────────────────────
+# Must run right after Baileys while fresh CDN URLs are still valid.
+# Output: wa_import/output/rentals.json
+run_step "WA rental scoring" \
+    ${COMPOSE} run --rm dashboard-ingest \
+        python wa_import/4_find_rentals.py \
+    || OVERALL="failure"
+
+# ── Step 1.6: Convert WA rentals → listing folders + copy media ───────────────
+# Reads rentals.json + messages.json, copies photos into whatsapp-*/
+# folders inside rentals/.  Must happen before the ingest step so
+# Meilisearch gets has_photos=true and the photo URLs.
+run_step "WA folder conversion" \
+    ${COMPOSE} run --rm dashboard-ingest \
+        python -m wa_import.convert_to_rentals --save \
+    || OVERALL="failure"
+
 # ── Step 2: Score messages + ingest to Meilisearch ───────────────────────────
 run_step "Ingest pipeline" \
     ${COMPOSE} run --rm dashboard-ingest \

@@ -293,9 +293,10 @@ def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[
     This handles the common WhatsApp pattern where a user sends a text message
     about a rental followed by several separate image messages.
 
-    Note: messages.json doesn't have a `media_file` field — that's only in
-    rentals.json.  We derive the filename from type_int (1=image) + media_id
-    using the convention `{media_id}.jpg` and check existence on disk.
+    Supports two media filename conventions:
+      1. ``{media_id}.jpg``  — 2_download_media.py / SQLite-based export
+      2. ``{stanza_id}.jpg`` — Baileys export (stored in media_local_path
+         as ``media/{stanza_id}.jpg``)
     """
     WINDOW = 10  # look ±10 messages from the listing's source message
 
@@ -305,6 +306,32 @@ def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[
         sid = m.get("stanza_id")
         if sid:
             stanza_to_idx[sid] = i
+
+    def _resolve_media_filename(msg: dict) -> Optional[str]:
+        """
+        Return the filename (relative to WA_MEDIA_DIR) for this message's
+        image, or None if no file exists on disk.
+
+        Tries two sources in order:
+          1. media_id  → "{media_id}.jpg"  (SQLite / 2_download_media.py)
+          2. media_local_path → basename when it starts with "media/"
+             (Baileys sets this to "media/{stanza_id}.jpg" after download)
+        """
+        # Convention 1: integer media_id
+        media_id = msg.get("media_id")
+        if media_id:
+            candidate = f"{media_id}.jpg"
+            if (WA_MEDIA_DIR / candidate).exists():
+                return candidate
+
+        # Convention 2: Baileys media_local_path = "media/{stanza_id}.jpg"
+        local_path = msg.get("media_local_path") or ""
+        if local_path.startswith("media/"):
+            candidate = local_path[len("media/"):]
+            if (WA_MEDIA_DIR / candidate).exists():
+                return candidate
+
+        return None
 
     for listing in listings:
         stanza_id = listing.get("_wa_stanza_id")
@@ -321,12 +348,9 @@ def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[
             # type_int == 1 means image message
             if m.get("type_int") != 1:
                 continue
-            media_id = m.get("media_id")
-            if not media_id:
-                continue
-            candidate = f"{media_id}.jpg"
-            if (WA_MEDIA_DIR / candidate).exists():
-                media_files.append(candidate)
+            fname = _resolve_media_filename(m)
+            if fname and fname not in media_files:
+                media_files.append(fname)
 
         # Also include the listing's own media_file if it has one
         own = listing.get("_wa_media_file")
