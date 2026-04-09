@@ -97,6 +97,36 @@ if info_mismatches:
 else:
     print(f"\n  All {sum(info_source_counts.values())} info.json source fields: CLEAN")
 
+# ── 2b. info.json status fields ──────────────────────────────────────────────
+print()
+print("=" * 60)
+print("2b. INFO.JSON STATUS FIELDS")
+print("=" * 60)
+VALID_STATUSES = {"active", "archived"}
+status_counts = defaultdict(int)
+missing_status = []
+
+for f in sorted(rentals.iterdir()):
+    if not f.is_dir() or not (f / "info.json").exists(): continue
+    info = json.loads((f / "info.json").read_text(encoding="utf-8"))
+    st = info.get("status") or ""
+    status_counts[st or "(missing)"] += 1
+    if not st or st not in VALID_STATUSES:
+        missing_status.append((f.name, st))
+
+for st, count in sorted(status_counts.items()):
+    ok = "OK" if st in VALID_STATUSES else "*** INVALID/MISSING ***"
+    print(f"  {st!r:<20} {count:>4} files  {ok}")
+
+if missing_status:
+    print(f"\n  PROBLEM: {len(missing_status)} info.json files missing valid status:")
+    for folder, st in missing_status[:10]:
+        print(f"    {folder}: {st!r}")
+    if len(missing_status) > 10:
+        print(f"    ... and {len(missing_status) - 10} more")
+else:
+    print(f"\n  All {sum(status_counts.values())} info.json status fields: CLEAN")
+
 # ── 3. Batch JSON files ───────────────────────────────────────────────────────
 print()
 print("=" * 60)
