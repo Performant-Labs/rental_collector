@@ -68,6 +68,7 @@ _URL_CHANNEL_MAP: list[tuple[str, str]] = [
     ("barakaentodos.com",            "baraka"),
     ("todossantosvillarentals.com",  "tsvilla"),
     ("pescaderopropertymgmt.com",    "pescprop"),
+    ("bajasurfcasitas.com",          "bajasurfcasitas"),
     ("craigslist.org",               "craigslist"),
     ("todossantos.cc",               "todossantos"),
 ]

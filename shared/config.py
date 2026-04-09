@@ -29,9 +29,10 @@ SOURCE_COLORS = {
     "whatsapp":    "#25D366",   # WhatsApp brand green
     # LLM-scraped websites
     "airbnb-live": "#ff385c",   # live Airbnb search (same colour as airbnb)
-    "amyrex":      "#0891b2",   # amyrextodossantos.com
-    "bajaprops":   "#0891b2",   # bajaproperties.com
-    "baraka":      "#0891b2",   # barakaentodos.com
-    "tsvilla":     "#0891b2",   # todossantosvillarentals.com
-    "pescprop":    "#0891b2",   # pescaderopropertymgmt.com
+    "amyrex":          "#0891b2",   # amyrextodossantos.com
+    "bajaprops":        "#0891b2",   # bajaproperties.com
+    "baraka":           "#0891b2",   # barakaentodos.com
+    "tsvilla":          "#0891b2",   # todossantosvillarentals.com
+    "pescprop":         "#0891b2",   # pescaderopropertymgmt.com
+    "bajasurfcasitas":  "#0891b2",   # bajasurfcasitas.com
 }
