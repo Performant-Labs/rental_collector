@@ -39,6 +39,8 @@ const CHECKPOINT_PATH  = path.join(OUTPUT_DIR, "baileys_export_checkpoint.json")
 const POST_SYNC_WAIT_MS = 30_000;
 // Save checkpoint every N messages
 const CHECKPOINT_INTERVAL = 200;
+// Timeout for individual image downloads (ms)
+const IMAGE_DOWNLOAD_TIMEOUT_MS = 15_000;
 
 // Message type mapping (matches 1_export_messages.py schema)
 const TYPE_MAP = {
@@ -183,13 +185,18 @@ async function downloadImage(msg, stanzaId) {
   if (fs.existsSync(outPath)) return filename;
 
   try {
-    const buffer = await downloadMediaMessage(msg, "buffer", {});
+    // Race the download against a timeout to prevent hanging on dead CDNs
+    const downloadPromise = downloadMediaMessage(msg, "buffer", {});
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), IMAGE_DOWNLOAD_TIMEOUT_MS)
+    );
+    const buffer = await Promise.race([downloadPromise, timeoutPromise]);
     if (buffer && buffer.length > 500) {
       fs.writeFileSync(outPath, buffer);
       return filename;
     }
   } catch {
-    // CDN expired or unavailable — skip silently
+    // CDN expired, unavailable, or timed out — skip silently
   }
   return null;
 }
@@ -249,6 +256,7 @@ async function main() {
   let batchCount = 0;
   let historySyncDone = false;
   let exitTimer = null;
+  let exitLogShown = false;
 
   console.log(`📋 Existing messages: ${existing.size.toLocaleString()}`);
   console.log(`🎯 Target group: ${TARGET_GROUP_JID}\n`);
@@ -261,7 +269,10 @@ async function main() {
 
   function scheduleExit() {
     if (exitTimer) return;
-    console.log(`\n⏳ History sync complete. Waiting ${POST_SYNC_WAIT_MS / 1000}s for stragglers…`);
+    if (!exitLogShown) {
+      console.log(`\n⏳ History sync complete. Waiting ${POST_SYNC_WAIT_MS / 1000}s for stragglers…`);
+      exitLogShown = true;
+    }
     exitTimer = setTimeout(() => {
       const total = saveMessages(existing);
       console.log(`\n✅ Done.`);
@@ -356,6 +367,13 @@ async function main() {
         historySyncDone = true;
         saveMessages(existing);
         saveCheckpoint({ lastRun: new Date().toISOString(), count: existing.size, syncComplete: true });
+      }
+
+      // Reset exit timer after every batch (not just isLatest) so we
+      // wait for more batches rather than exiting mid-stream.
+      if (historySyncDone) {
+        if (exitTimer) clearTimeout(exitTimer);
+        exitTimer = null;
         scheduleExit();
       }
     });
