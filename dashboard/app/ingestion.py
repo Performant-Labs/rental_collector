@@ -153,18 +153,30 @@ def normalise_listing_document(raw: dict[str, Any], folder: Path) -> dict[str, A
     listing_dir = listing_dir.replace("\\", "/")  # normalize Windows backslashes
     photo_urls = [f"/{listing_dir}/{p}" for p in local_photos]
 
+    # Backward-compat defaults for new fields: existing info.json files that
+    # pre-date this change will be missing these keys.
+    scraped = str(raw.get("scraped") or "").strip() or None
+    status = str(raw.get("status") or "active").strip()
+    last_checked = str(raw.get("last_checked") or scraped or "").strip() or None
+    last_updated = str(raw.get("last_updated") or scraped or "").strip() or None
+    archived_date = str(raw.get("archived_date") or "").strip() or None
+
     return {
         "id": listing_id,
         "title": title,
         "description": str(raw.get("description") or "").strip(),
         "source": source,
+        "status": status,
         "price_usd": price_usd,
         "price_bucket": compute_price_bucket(price_usd),
         "location": _normalise_location(raw.get("location")),
         "listing_type": str(raw.get("listing_type") or "").strip() or None,
         "has_photos": len(local_photos) > 0,
         "has_contact": has_contact,
-        "scraped": str(raw.get("scraped") or "").strip() or None,
+        "scraped": scraped,
+        "last_checked": last_checked,
+        "last_updated": last_updated,
+        "archived_date": archived_date,
         "listing_path": listing_path,
         "photos": photo_urls,
     }

@@ -36,6 +36,7 @@ def normalise(raw: dict, source: str) -> dict:
     return {
         "title":        raw.get("title") or "",
         "source":       source,  # always the caller-supplied channel; never the LLM value
+        "status":       raw.get("status") or "active",          # "active" | "archived"
         "price_usd":    price,
         "bedrooms":     raw.get("bedrooms"),
         "location":     raw.get("location") or "Todos Santos",
@@ -47,6 +48,8 @@ def normalise(raw: dict, source: str) -> dict:
         "listing_type": raw.get("listingType") or raw.get("listing_type"),
         "checkin":      raw.get("checkin"),
         "checkout":     raw.get("checkout"),
-        "scraped":      raw.get("scraped") or TODAY,
+        "scraped":      raw.get("scraped") or TODAY,            # immutable first-index date
+        "last_checked": raw.get("last_checked") or TODAY,       # last scrape that saw this listing
+        "last_updated": raw.get("last_updated") or TODAY,       # last time content changed
         "photo_url":    raw.get("photo_url"),
     }

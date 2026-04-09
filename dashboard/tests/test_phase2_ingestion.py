@@ -238,3 +238,104 @@ def test_whatsapp_listing_with_price_always_valid(tmp_path: Path):
     document = normalise_listing_document(raw, folder)
     from dashboard.app.ingestion import _is_valid_document
     assert _is_valid_document(document)
+
+
+# ── Phase 1: status / timestamp fields ───────────────────────────────────────
+
+def test_document_has_status_field(tmp_path: Path):
+    """normalise_listing_document must always emit a status field."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "airbnb-01-status-test",
+        {"title": "Casa Test", "source": "airbnb", "price_usd": 900},
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    doc = normalise_listing_document(raw, folder)
+    assert "status" in doc
+
+
+def test_missing_status_in_info_json_defaults_to_active(tmp_path: Path):
+    """Legacy info.json without status field must read as 'active'."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "airbnb-01-legacy",
+        {"title": "Legacy Listing", "source": "airbnb", "price_usd": 750},
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    assert "status" not in raw  # confirm no status in file
+    doc = normalise_listing_document(raw, folder)
+    assert doc["status"] == "active"
+
+
+def test_archived_status_passes_through(tmp_path: Path):
+    """info.json with status='archived' must produce status='archived' in the doc."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "craigslist-01-archived",
+        {
+            "title": "Old Rental",
+            "source": "craigslist",
+            "price_usd": 600,
+            "status": "archived",
+            "archived_date": "2026-03-01",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    doc = normalise_listing_document(raw, folder)
+    assert doc["status"] == "archived"
+    assert doc["archived_date"] == "2026-03-01"
+
+
+def test_last_checked_defaults_to_scraped_when_missing(tmp_path: Path):
+    """Legacy info.json without last_checked falls back to scraped date."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "whatsapp-01-legacy",
+        {
+            "title": "WA Rental",
+            "source": "whatsapp",
+            "price_usd": 800,
+            "scraped": "2026-03-15",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    doc = normalise_listing_document(raw, folder)
+    assert doc["last_checked"] == "2026-03-15"
+
+
+def test_last_updated_defaults_to_scraped_when_missing(tmp_path: Path):
+    """Legacy info.json without last_updated falls back to scraped date."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "whatsapp-02-legacy",
+        {
+            "title": "WA Rental 2",
+            "source": "whatsapp",
+            "price_usd": 850,
+            "scraped": "2026-03-20",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    doc = normalise_listing_document(raw, folder)
+    assert doc["last_updated"] == "2026-03-20"
+
+
+def test_explicit_last_checked_preserved(tmp_path: Path):
+    """Explicit last_checked in info.json must not be overwritten."""
+    folder = _make_listing_folder(
+        tmp_path,
+        "airbnb-02-checked",
+        {
+            "title": "Updated Casita",
+            "source": "airbnb",
+            "price_usd": 1000,
+            "scraped": "2026-01-01",
+            "last_checked": "2026-04-09",
+            "last_updated": "2026-04-05",
+        },
+    )
+    raw = json.loads((folder / "info.json").read_text(encoding="utf-8"))
+    doc = normalise_listing_document(raw, folder)
+    assert doc["last_checked"] == "2026-04-09"
+    assert doc["last_updated"] == "2026-04-05"
+    assert doc["scraped"] == "2026-01-01"  # immutable

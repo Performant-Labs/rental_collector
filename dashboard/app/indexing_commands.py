@@ -11,14 +11,16 @@ from dashboard.app.meilisearch_index_client import MeilisearchIndexClient
 DEFAULT_INDEX_SETTINGS: dict[str, list[str]] = {
     "filterableAttributes": [
         "source",
+        "status",
         "price_bucket",
         "location",
         "listing_type",
         "has_photos",
         "has_contact",
         "scraped",
+        "last_checked",
     ],
-    "sortableAttributes": ["price_usd", "scraped"],
+    "sortableAttributes": ["price_usd", "scraped", "last_checked", "last_updated"],
     "searchableAttributes": ["title", "location", "description"],
 }
 

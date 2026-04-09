@@ -19,9 +19,10 @@ import convert_to_rentals as cr
 
 # Canonical field set (no internal _wa_ fields)
 CANONICAL_KEYS = {
-    "title", "source", "price_usd", "bedrooms", "location",
+    "title", "source", "status", "price_usd", "bedrooms", "location",
     "url", "contact", "description", "amenities", "rating",
-    "listing_type", "checkin", "checkout", "scraped", "localPhotos",
+    "listing_type", "checkin", "checkout", "scraped",
+    "last_checked", "last_updated", "localPhotos",
 }
 
 _FIXTURE_DIR   = Path(__file__).parent / "test_fixtures"

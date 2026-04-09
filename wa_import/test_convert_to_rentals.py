@@ -169,9 +169,10 @@ class TestFieldMapping(unittest.TestCase):
 
     def test_canonical_keys_present(self):
         result = cr.convert_message(_make_msg())
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "localPhotos",
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "localPhotos",
                     "_wa_score", "_wa_media_file", "_wa_media_files",
                     "_wa_id", "_wa_stanza_id", "_wa_from_jid"}
         self.assertEqual(set(result.keys()), expected)
@@ -386,11 +387,14 @@ class TestSaveAndDiff(unittest.TestCase):
 
     def _listing(self, title="Studio", price=1000, score=20):
         return {
-            "title": title, "source": cr.SOURCE, "price_usd": price,
+            "title": title, "source": cr.SOURCE, "status": "active",
+            "price_usd": price,
             "bedrooms": None, "location": "Todos Santos", "url": None,
             "contact": None, "description": title, "amenities": [],
             "rating": None, "listing_type": None, "checkin": None,
-            "checkout": None, "scraped": cr.TODAY, "localPhotos": [],
+            "checkout": None, "scraped": cr.TODAY,
+            "last_checked": cr.TODAY, "last_updated": cr.TODAY,
+            "localPhotos": [],
             "_wa_score": score, "_wa_media_file": None, "_wa_id": 1,
         }
 
@@ -418,9 +422,10 @@ class TestSaveAndDiff(unittest.TestCase):
         cr.save_results([self._listing()], create_folders=False)
         out = self._tmp / f"{cr.SOURCE}-{cr.TODAY}.json"
         data = json.loads(out.read_text())
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "localPhotos"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "localPhotos"}
         self.assertEqual(set(data[0].keys()), expected)
 
     def test_diff_no_previous_no_error(self):
@@ -526,11 +531,13 @@ class TestFolderGeneration(unittest.TestCase):
 
     def _listing(self, title="Studio Pescadero", price=900, media=None):
         return {
-            "title": title, "source": cr.SOURCE, "price_usd": price,
+            "title": title, "source": cr.SOURCE, "status": "active",
+            "price_usd": price,
             "bedrooms": "1 bedroom", "location": "Todos Santos", "url": None,
             "contact": "612-111-2222", "description": "Nice place.",
             "amenities": [], "rating": None, "listing_type": None,
             "checkin": None, "checkout": None, "scraped": cr.TODAY,
+            "last_checked": cr.TODAY, "last_updated": cr.TODAY,
             "localPhotos": [],
             "_wa_score": 25, "_wa_media_file": media, "_wa_id": 42,
         }
@@ -550,9 +557,10 @@ class TestFolderGeneration(unittest.TestCase):
         cr.save_listing_folder(self._listing(), 1, {})
         folders = list(cr.RESULTS_DIR.glob("whatsapp-*"))
         data = json.loads((folders[0] / "info.json").read_text())
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "localPhotos"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "localPhotos"}
         self.assertEqual(set(data.keys()), expected)
 
     def test_info_json_no_internal_fields(self):

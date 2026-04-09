@@ -18,9 +18,10 @@ class TestNormalise(unittest.TestCase):
 
     def test_canonical_keys_present(self):
         result = rs.normalise({}, "airbnb")
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url"}
         self.assertEqual(set(result.keys()), expected)
 
     def test_source_always_overwritten(self):
@@ -341,9 +342,10 @@ class TestParseClaudeOutput(unittest.TestCase):
 
     def test_all_canonical_keys_present(self):
         result = rs._parse_claude_output(json.dumps([self._raw_listing()]), "claude-api")
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     def test_garbage_input_returns_empty(self):
@@ -497,9 +499,10 @@ class TestScrapeCreaigslist(unittest.TestCase):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
         result = rs.scrape_craigslist()
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     @patch("scraper.scrapers.get_soup")
@@ -581,9 +584,10 @@ class TestScrapeTodosSantosCc(unittest.TestCase):
         from bs4 import BeautifulSoup
         mock_soup.return_value = BeautifulSoup(self._make_html(), "html.parser")
         result = rs.scrape_todos_santos_cc()
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url"}
         self.assertEqual(set(result[0].keys()), expected)
 
     @patch("scraper.scrapers.get_soup")
@@ -680,9 +684,10 @@ class TestSaveAndDiff(unittest.TestCase):
     def test_saved_listings_have_canonical_keys(self):
         path = rs.save_results([self._listing("Studio")], "airbnb")
         saved = json.loads(path.read_text())
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url"}
         self.assertEqual(set(saved[0].keys()), expected)
 
     def test_diff_no_previous(self):
@@ -911,10 +916,10 @@ class TestSaveListingFolder(unittest.TestCase):
     def test_info_json_has_canonical_keys(self, _):
         folder = rs.save_listing_folder(self._listing(), 1)
         data = json.loads((folder / "info.json").read_text())
-        expected = {"title", "source", "price_usd", "bedrooms", "location",
+        expected = {"title", "source", "status", "price_usd", "bedrooms", "location",
                     "url", "contact", "description", "amenities", "rating",
-                    "listing_type", "checkin", "checkout", "scraped", "localPhotos",
-                    "photo_url"}
+                    "listing_type", "checkin", "checkout", "scraped",
+                    "last_checked", "last_updated", "photo_url", "localPhotos"}
         self.assertEqual(set(data.keys()), expected)
 
     @patch("scraper.folder_ops.fetch_photos", return_value=[])
