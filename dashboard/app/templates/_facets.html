@@ -30,28 +30,29 @@
 <div class="muted facet-count">{{ search.total_hits }} result(s)</div>
 
 {% for field in facet_fields %}
-  {% if field == "status" %}{% continue %}{% endif %}
-  {% set buckets = search.facets.get(field, {}) %}
-  {% if buckets %}
-    <div class="facet-group">
-      <h4>{{ field.replace('_', ' ').title() }}</h4>
-      {% for value, count in buckets|dictsort %}
-        {% set checked = value in search.selected_filters.get(field, []) %}
-        <label class="facet-option">
-          <span>
-            <input
-              type="checkbox"
-              name="{{ field }}"
-              value="{{ value }}"
-              data-facet-field="{{ field }}"
-              data-facet-value="{{ value }}"
-              {% if checked %}checked{% endif %}
-            />
-            {{ value }}
-          </span>
-          <span class="muted">{{ count }}</span>
-        </label>
-      {% endfor %}
-    </div>
+  {% if field != "status" %}
+    {% set buckets = search.facets.get(field, {}) %}
+    {% if buckets %}
+      <div class="facet-group">
+        <h4>{{ field.replace('_', ' ').title() }}</h4>
+        {% for value, count in buckets|dictsort %}
+          {% set checked = value in search.selected_filters.get(field, []) %}
+          <label class="facet-option">
+            <span>
+              <input
+                type="checkbox"
+                name="{{ field }}"
+                value="{{ value }}"
+                data-facet-field="{{ field }}"
+                data-facet-value="{{ value }}"
+                {% if checked %}checked{% endif %}
+              />
+              {{ value }}
+            </span>
+            <span class="muted">{{ count }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    {% endif %}
   {% endif %}
 {% endfor %}
