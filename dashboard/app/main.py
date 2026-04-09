@@ -85,6 +85,15 @@ def _get_ingest_stats() -> dict:
         return {}
 
 
+def _get_run_status() -> dict:
+    """Read the per-step pass/fail status written by daily_update.ps1/.sh."""
+    status_path = REPO_ROOT / "rentals" / "last_run_status.json"
+    try:
+        return json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(
     request: Request,
@@ -104,6 +113,7 @@ def home(
             "last_run": _get_last_run_time(),
             "source_colors": SOURCE_COLORS,
             "ingest_stats": _get_ingest_stats(),
+            "run_status": _get_run_status(),
         },
     )
 

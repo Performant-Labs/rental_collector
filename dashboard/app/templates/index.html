@@ -87,6 +87,16 @@
       /* Status facet group accent border */
       .facet-group--status { border-left: 3px solid #d1d5db; padding-left: 8px; }
       .facet-count { margin: 8px 0 14px; }
+
+      /* Nightly pipeline run-status badges */
+      .run-status { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; align-items: center; }
+      .step-pill  { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600;
+                    padding: 2px 7px; border-radius: 999px; }
+      .step-pill--pass { background: #d1fae5; color: #065f46; }
+      .step-pill--fail { background: #fee2e2; color: #991b1b; }
+      .step-pill--skip { background: #f3f4f6; color: #6b7280; }
+      .run-overall--failure { color: #b91c1c; font-weight: 600; font-size: 12px; }
+      .run-overall--success { color: #059669; font-size: 12px; }
     </style>
   </head>
   <body>
@@ -116,6 +126,21 @@
         </div>
         {% if last_run %}
           <div class="muted" style="font-size:12px; margin-top:2px;">Last updated: {{ last_run }}</div>
+        {% endif %}
+        {% if run_status %}
+          <div class="run-status" title="Last nightly pipeline: {{ run_status.run_at }} ({{ run_status.duration_s }}s)">
+            <span class="muted" style="font-size:11px;">Pipeline:</span>
+            {% for step, result in run_status.steps.items() %}
+              <span class="step-pill step-pill--{{ result | lower }}"
+                    title="{{ step }}: {{ result }}">
+                {% if result == 'PASS' %}✓{% elif result == 'FAIL' %}✗{% else %}-{% endif %}
+                {{ step | replace('_', ' ') }}
+              </span>
+            {% endfor %}
+            {% if run_status.overall == 'failure' %}
+              <span class="run-overall--failure">⚠ last run had failures</span>
+            {% endif %}
+          </div>
         {% endif %}
       </div>
 
