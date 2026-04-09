@@ -752,6 +752,53 @@ class TestFindNearbyImages(unittest.TestCase):
         result = cr._find_nearby_images([listing_no_stanza], msgs)
         self.assertEqual(result[0]["_wa_media_files"], [])
 
+    # ── Convention 3: Playwright stanza_id.jpg ────────────────────────────────
+
+    def test_playwright_stanza_id_convention_found(self):
+        """
+        3_playwright_capture.mjs saves captured images as {stanza_id}.jpg.
+        _find_nearby_images must find them even when media_id and
+        media_local_path are both absent.
+        """
+        self._write_media("PLAYWRIGHT1234ABCD.jpg")
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "PLAYWRIGHT1234ABCD", "type_int": 1,
+             "media_id": None, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertIn("PLAYWRIGHT1234ABCD.jpg", result[0]["_wa_media_files"])
+
+    def test_playwright_stanza_id_missing_file_excluded(self):
+        msgs = [
+            {"stanza_id": "ANCHOR", "type_int": 0, "text": "rental"},
+            {"stanza_id": "GHOST_STANZA", "type_int": 1,
+             "media_id": None, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        self.assertEqual(result[0]["_wa_media_files"], [])
+
+    def test_all_three_conventions_in_same_window(self):
+        """All three conventions can co-exist for different images in the same window."""
+        self._write_media("12345.jpg")             # SQLite
+        self._write_media("BAILEYS_STANZA.jpg")    # Baileys
+        self._write_media("PLAYWRIGHT_STANZA.jpg") # Playwright
+        msgs = [
+            {"stanza_id": "ANCHOR",           "type_int": 0, "text": "rental"},
+            {"stanza_id": "SQLITE_MSG",        "type_int": 1,
+             "media_id": 12345, "media_local_path": None},
+            {"stanza_id": "BAILEYS_STANZA",    "type_int": 1,
+             "media_id": None, "media_local_path": "media/BAILEYS_STANZA.jpg"},
+            {"stanza_id": "PLAYWRIGHT_STANZA", "type_int": 1,
+             "media_id": None, "media_local_path": None},
+        ]
+        result = cr._find_nearby_images([self._listing("ANCHOR")], msgs)
+        files = result[0]["_wa_media_files"]
+        self.assertIn("12345.jpg",             files, "SQLite convention missing")
+        self.assertIn("BAILEYS_STANZA.jpg",    files, "Baileys convention missing")
+        self.assertIn("PLAYWRIGHT_STANZA.jpg", files, "Playwright convention missing")
+        self.assertEqual(len(files), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

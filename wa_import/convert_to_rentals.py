@@ -312,12 +312,18 @@ def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[
         Return the filename (relative to WA_MEDIA_DIR) for this message's
         image, or None if no file exists on disk.
 
-        Tries two sources in order:
-          1. media_id  → "{media_id}.jpg"  (SQLite / 2_download_media.py)
+        Tries three sources in order:
+          1. media_id  → "{media_id}.jpg"
+             SQLite / 2_download_media.py convention.
           2. media_local_path → basename when it starts with "media/"
-             (Baileys sets this to "media/{stanza_id}.jpg" after download)
+             Baileys sets this to "media/{stanza_id}.jpg" after real-time
+             download during the nightly wa-exporter run.
+          3. stanza_id → "{stanza_id}.jpg"
+             3_playwright_capture.mjs scrolls WA Web and saves files using
+             the message stanza ID, allowing retroactive photo recovery for
+             all historical messages.
         """
-        # Convention 1: integer media_id
+        # Convention 1: integer media_id (SQLite / 2_download_media.py)
         media_id = msg.get("media_id")
         if media_id:
             candidate = f"{media_id}.jpg"
@@ -328,6 +334,13 @@ def _find_nearby_images(listings: List[dict], all_messages: List[dict]) -> List[
         local_path = msg.get("media_local_path") or ""
         if local_path.startswith("media/"):
             candidate = local_path[len("media/"):]
+            if (WA_MEDIA_DIR / candidate).exists():
+                return candidate
+
+        # Convention 3: Playwright capture → "{stanza_id}.jpg"
+        stanza_id = msg.get("stanza_id")
+        if stanza_id:
+            candidate = f"{stanza_id}.jpg"
             if (WA_MEDIA_DIR / candidate).exists():
                 return candidate
 

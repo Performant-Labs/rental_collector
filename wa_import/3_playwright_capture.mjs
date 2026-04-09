@@ -1,55 +1,79 @@
 /**
  * Step 3 (Playwright): Capture WA media via real browser session.
- * 
- * USAGE: node 3_playwright_capture.mjs
- * 
- * After QR scan:
- *  1. Manually click "A Community of Todos Santos" in the sidebar
- *  2. The script will start scrolling automatically
- *  3. Ctrl+C to stop — captured files are saved
+ *
+ * Scrolls back through "A Community of Todos Santos" in WhatsApp Web,
+ * intercepts every CDN image response, and saves it as {stanza_id}.jpg
+ * so it is automatically linked to listings by convert_to_rentals.py.
+ *
+ * NO SQLite database required — uses messages.json for the URL→stanza_id
+ * index.  All captured files use the same naming convention as Baileys:
+ *   output/media/{stanza_id}.jpg
+ *
+ * USAGE:
+ *   node 3_playwright_capture.mjs
+ *
+ * First run: a browser window opens → scan the QR code once.
+ *   (.playwright_session/ is saved so subsequent runs skip the QR scan)
+ *
+ * Once connected:
+ *   1. Click "A Community of Todos Santos" in the sidebar
+ *   2. Press ENTER in this terminal → auto-scroll begins
+ *   3. Ctrl+C to stop safely (checkpoint is saved)
+ *
+ * After capturing, run:
+ *   python -m wa_import.convert_to_rentals --save
+ *   python -m dashboard.app.ingest_runner --mode full
  */
 
 import { chromium } from "playwright";
-import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import readline from "readline";
 
-const __dirname  = path.dirname(fileURLToPath(import.meta.url));
-const OUTPUT_DIR = path.join(__dirname, "output", "media");
-const DB_PATH    = path.join(__dirname, "ChatStorage.sqlite");
-const LOG_PATH   = path.join(__dirname, "output", "playwright_capture_log.json");
-const SCROLL_PAUSE_MS = 1000;
-const SCROLL_PX       = 2500;
+const __dirname   = path.dirname(fileURLToPath(import.meta.url));
+const OUTPUT_DIR  = path.join(__dirname, "output", "media");
+const MSGS_PATH   = path.join(__dirname, "output", "messages.json");
+const LOG_PATH    = path.join(__dirname, "output", "playwright_capture_log.json");
+const SESSION_DIR = path.join(__dirname, ".playwright_session");
 
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+const SCROLL_PAUSE_MS = 1200;   // pause between scroll steps (ms)
+const SCROLL_PX       = 2500;   // pixels to scroll up per step
 
-// ── Build URL file-ID → filename map from DB ─────────────────────────────────
+fs.mkdirSync(OUTPUT_DIR,  { recursive: true });
+fs.mkdirSync(SESSION_DIR, { recursive: true });
+
+// ── Build URL path-segment → {stanza_id, filename} index from messages.json ──
+//
+// WA CDN URLs look like:
+//   https://mmg.whatsapp.net/v/t62.7118-24/{filePathId}?ccb=…&oh=…&oe=…
+//
+// The path segment (filePathId) is stable — it doesn't change when the URL
+// is refreshed.  We match the fresh URL intercepted from WA Web against the
+// expired URL stored in messages.json using just that path segment.
+//
 function buildUrlIndex() {
-  const db = new Database(DB_PATH, { readonly: true });
-  const rows = db.prepare(`
-    SELECT mi.Z_PK as media_id, mi.ZMEDIAURL as url,
-           m.ZMESSAGETYPE as msg_type, mi.ZTITLE as title
-    FROM ZWAMEDIAITEM mi
-    JOIN ZWAMESSAGE m ON m.ZMEDIAITEM = mi.Z_PK
-    WHERE mi.ZMEDIAURL IS NOT NULL
-  `).all();
-  db.close();
+  if (!fs.existsSync(MSGS_PATH)) {
+    console.warn(`  ⚠️  ${MSGS_PATH} not found — running without URL index.`);
+    console.warn(`     Files will be saved as captured_TIMESTAMP_fileId.`);
+    return new Map();
+  }
 
-  const TYPE_EXT = { 1:".jpg", 2:".mp4", 3:".ogg", 4:"", 7:".mp4", 14:".webp", 15:".webp" };
-  const index = new Map();
-  for (const r of rows) {
+  const msgs = JSON.parse(fs.readFileSync(MSGS_PATH, "utf8"));
+  const index = new Map(); // pathSegment → stanza_id
+
+  for (const m of msgs) {
+    const stanzaId = m.stanza_id;
+    const url = m.media_url;
+    if (!stanzaId || !url || m.type_int !== 1) continue; // images only
     try {
-      const fileId = new URL(r.url).pathname.split("/").filter(Boolean).pop();
-      const ext = TYPE_EXT[r.msg_type] ?? ".bin";
-      const filename = (r.msg_type === 4 && r.title)
-        ? `${r.media_id}_${r.title.replace(/[^a-zA-Z0-9._\- ]/g,"").slice(0,60)}`
-        : `${r.media_id}${ext}`;
-      index.set(fileId, filename);
+      // Extract the last path segment before the query string
+      const pathSeg = new URL(url).pathname.split("/").filter(Boolean).pop();
+      if (pathSeg) index.set(pathSeg, stanzaId);
     } catch (_) {}
   }
-  console.log(`  DB index: ${index.size.toLocaleString()} media entries\n`);
+
+  console.log(`  messages.json index: ${index.size.toLocaleString()} image URL entries`);
   return index;
 }
 
@@ -62,21 +86,18 @@ function waitForEnter(prompt) {
 
 async function main() {
   console.log("\n🎭 WA Media Capture via Playwright");
-  console.log("─────────────────────────────────────\n");
+  console.log("───────────────────────────────────\n");
 
-  const urlIndex = buildUrlIndex();
+  const urlIndex   = buildUrlIndex();
   const captureLog = [];
   let captured = 0;
   let skipped  = 0;
 
-  const SESSION_DIR = path.join(__dirname, ".playwright_session");
-  const sessionExists = fs.existsSync(SESSION_DIR) && fs.readdirSync(SESSION_DIR).length > 0;
-  fs.mkdirSync(SESSION_DIR, { recursive: true });
-
+  const sessionExists = fs.readdirSync(SESSION_DIR).length > 0;
   if (sessionExists) {
-    console.log("🔄 Resuming saved session — no QR scan needed.\n");
+    console.log("🔄 Resuming saved browser session — no QR scan needed.\n");
   } else {
-    console.log("🆕 No saved session found — QR scan required (once only).\n");
+    console.log("🆕 No saved session — one-time QR scan required.\n");
   }
 
   const browser = await chromium.launchPersistentContext(SESSION_DIR, {
@@ -88,27 +109,43 @@ async function main() {
 
   const page = await browser.newPage();
 
-  // ── Capture WA media via response event (works with Service Workers) ────────
+  // ── Intercept WA CDN responses ───────────────────────────────────────────────
   page.on("response", async (response) => {
     const url = response.url();
-    // Match all WA CDN variants: mmg.whatsapp.net, media.whatsapp.net, *.cdn.whatsapp.net
     if (!url.includes(".whatsapp.net")) return;
     if (!response.ok()) return;
+
     try {
       const body = await response.body();
-      if (body.length < 5120) return; // skip files < 5KB
-      const fileId  = url.split("/").pop().split("?")[0];
-      const filename = urlIndex.get(fileId) || `captured_${Date.now()}_${fileId.slice(0, 20)}`;
-      const outPath  = path.join(OUTPUT_DIR, filename);
+      if (body.length < 5120) return;   // skip < 5 KB (thumbnails, etc.)
+
+      // Extract stable path segment from the URL
+      const pathSeg = new URL(url).pathname.split("/").filter(Boolean).pop();
+
+      let filename;
+      if (pathSeg && urlIndex.has(pathSeg)) {
+        // Known message → save as {stanza_id}.jpg (links automatically to listing)
+        filename = `${urlIndex.get(pathSeg)}.jpg`;
+      } else {
+        // Unknown URL (e.g. profile photos, status) → save with timestamp prefix
+        filename = `captured_${Date.now()}_${(pathSeg || "unknown").slice(0, 24)}`;
+      }
+
+      const outPath = path.join(OUTPUT_DIR, filename);
       if (!fs.existsSync(outPath)) {
         fs.writeFileSync(outPath, body);
-        captureLog.push({ filename, bytes: body.length });
+        captureLog.push({ filename, url, bytes: body.length });
         captured++;
-        console.log(`  ✅ [${captured}] ${filename}  (${(body.length / 1024).toFixed(0)}KB)`);
-        if (captured % 20 === 0) fs.writeFileSync(LOG_PATH, JSON.stringify(captureLog, null, 2));
+        const kb = (body.length / 1024).toFixed(0);
+        const linked = urlIndex.has(pathSeg) ? "✅" : "💾";
+        console.log(`  ${linked} [${captured}] ${filename}  (${kb} KB)`);
+        if (captured % 20 === 0) {
+          fs.writeFileSync(LOG_PATH, JSON.stringify(captureLog, null, 2));
+          console.log(`  ── checkpoint: ${captured} captured so far ──`);
+        }
       } else {
         skipped++;
-        if (skipped % 50 === 0) console.log(`  ⏭  ${skipped} files already exist`);
+        if (skipped % 50 === 0) console.log(`  ⏭  ${skipped} already exist`);
       }
     } catch (_) {}
   });
@@ -117,27 +154,22 @@ async function main() {
   console.log("🌐 Opening WhatsApp Web…");
   await page.goto("https://web.whatsapp.com", { waitUntil: "domcontentloaded" });
 
-  // Wait for chats to load (flexible selector)
-  console.log("⏳ Waiting for QR scan and chat list to appear…\n");
-  await page.waitForFunction(() => {
-    // Connected when we see the sidebar with chats
-    return document.querySelector('[data-testid="chat-list"]') !== null
-        || document.querySelector('div[aria-label="Chat list"]') !== null
-        || document.querySelector('#side') !== null;
-  }, { timeout: 300_000 }); // 5 min timeout for QR scan
+  console.log("⏳ Waiting for chat list (scan QR if needed)…\n");
+  await page.waitForFunction(() =>
+    document.querySelector('[data-testid="chat-list"]') !== null
+    || document.querySelector('div[aria-label="Chat list"]') !== null
+    || document.querySelector("#side") !== null
+  , { timeout: 300_000 });
 
   console.log("✅ Connected!\n");
   console.log("👉 ACTION REQUIRED:");
-  console.log("   In the browser window, click on:");
-  console.log('   "A Community of Todos Santos"');
+  console.log('   Click "A Community of Todos Santos" in the sidebar.');
   console.log("   (use the search box if needed)\n");
 
-  await waitForEnter("   Press ENTER here once you have the group open and can see messages…\n");
+  await waitForEnter("   Press ENTER once you can see the chat messages…\n");
 
-  // ── Diagnose + scroll ────────────────────────────────────────────────────────
-  // Move mouse to the conversation panel area (right half of screen)
+  // ── Find the scrollable message panel ────────────────────────────────────────
   await page.mouse.move(800, 450);
-
   const panelInfo = await page.evaluate(() => {
     const scrollables = Array.from(document.querySelectorAll("*")).filter(el => {
       const s = getComputedStyle(el);
@@ -145,63 +177,49 @@ async function main() {
       return (s.overflowY === "scroll" || s.overflowY === "auto")
         && el.scrollHeight > el.clientHeight
         && el.clientHeight > 200
-        && r.left > 200;   // RIGHT panel only — ignore left sidebar
+        && r.left > 200;   // right panel only
     });
     scrollables.sort((a, b) => b.scrollHeight - a.scrollHeight);
     const el = scrollables[0];
     if (!el) return null;
     el.setAttribute("data-wa-scroll-target", "1");
-    const r = el.getBoundingClientRect();
     return {
-      tag: el.tagName,
-      id: el.id,
-      cls: el.className.slice(0, 60),
-      scrollTop: el.scrollTop,
-      scrollHeight: el.scrollHeight,
+      scrollTop: el.scrollTop, scrollHeight: el.scrollHeight,
       clientHeight: el.clientHeight,
-      left: Math.round(r.left),
-      top: Math.round(r.top),
     };
   });
 
   if (!panelInfo) {
-    console.log("❌ No scrollable panel found in right half of screen.");
-    console.log("   Make sure the group chat is open and messages are visible.\n");
+    console.log("❌ No scrollable panel found — make sure the group chat is open.");
   } else {
-    console.log("✅ Scroll target found:");
-    console.log(`   Tag:          ${panelInfo.tag}${panelInfo.id ? '#'+panelInfo.id : ''}`);
-    console.log(`   Class:        ${panelInfo.cls}`);
-    console.log(`   Position:     left=${panelInfo.left}px top=${panelInfo.top}px`);
-    console.log(`   scrollTop:    ${panelInfo.scrollTop}`);
-    console.log(`   scrollHeight: ${panelInfo.scrollHeight}`);
-    console.log(`   clientHeight: ${panelInfo.clientHeight}\n`);
+    console.log(`✅ Scroll target found (scrollHeight=${panelInfo.scrollHeight})\n`);
+    console.log(`   Scrolling up through history — Ctrl+C to stop.\n`);
   }
 
+  // ── Auto-scroll loop ─────────────────────────────────────────────────────────
   let scrollCount = 0;
+  process.on("SIGINT", () => {
+    fs.writeFileSync(LOG_PATH, JSON.stringify(captureLog, null, 2));
+    console.log(`\n\n✅ Stopped.  ${captured} images captured, ${skipped} already existed.`);
+    console.log(`   Log: ${LOG_PATH}`);
+    console.log("\n   Next steps:");
+    console.log("     python -m wa_import.convert_to_rentals --save");
+    console.log("     python -m dashboard.app.ingest_runner --mode full\n");
+    process.exit(0);
+  });
 
   while (true) {
-    // Primary: JS scrollTop on the tagged element
-    const result = await page.evaluate(() => {
+    await page.evaluate(() => {
       const panel = document.querySelector("[data-wa-scroll-target]");
-      if (!panel) return { ok: false, before: 0, after: 0 };
-      const before = panel.scrollTop;
+      if (!panel) return;
       panel.scrollTop -= 2500;
-      // Also dispatch scroll event to trigger React handlers
       panel.dispatchEvent(new Event("scroll", { bubbles: true }));
-      return { ok: true, before, after: panel.scrollTop };
     });
-
-    // Backup: native mouse wheel at conversation panel position
-    await page.mouse.wheel(0, -800);
+    await page.mouse.wheel(0, -800);   // backup — triggers WA lazy-load
 
     scrollCount++;
-
-    // Log every 5 steps so we can see if scroll is working
-    if (scrollCount <= 20 || scrollCount % 50 === 0) {
-      const status = result.ok
-        ? `scrollTop ${result.before} → ${result.after}`
-        : `⚠️ panel not found`;
-      console.log(`  [${scrollCount}] ${status} | captured=${captured}`);
+    if (scrollCount <= 10 || scrollCount % 100 === 0) {
+      console.log(`  [scroll #${scrollCount}] captured=${captured} skipped=${skipped}`);
     }
 
     await page.waitForTimeout(SCROLL_PAUSE_MS);
@@ -212,4 +230,3 @@ main().catch(err => {
   console.error("\nError:", err.message);
   process.exit(1);
 });
-
