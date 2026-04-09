@@ -257,6 +257,8 @@ async function main() {
   let historySyncDone = false;
   let exitTimer = null;
   let exitLogShown = false;
+  let reconnectCount = 0;
+  const MAX_RECONNECTS = 5;
 
   console.log(`📋 Existing messages: ${existing.size.toLocaleString()}`);
   console.log(`🎯 Target group: ${TARGET_GROUP_JID}\n`);
@@ -342,12 +344,21 @@ async function main() {
       if (connection === "open") {
         console.log("✅ Connected! Waiting for history sync…");
         console.log("   (Large groups can take 10–30 minutes)\n");
+        reconnectCount = 0;  // Reset on successful connection
       }
       if (connection === "close") {
         const code = lastDisconnect?.error?.output?.statusCode;
         if (code !== DisconnectReason.loggedOut) {
-          console.log("Reconnecting…");
-          connect();
+          reconnectCount++;
+          if (reconnectCount > MAX_RECONNECTS) {
+            console.log(`❌ Too many reconnect attempts (${MAX_RECONNECTS}). Saving and exiting…`);
+            const total = saveMessages(existing);
+            console.log(`   Saved ${total.toLocaleString()} messages (${newCount} new).`);
+            process.exit(1);
+          }
+          const delay = Math.min(2000 * Math.pow(2, reconnectCount - 1), 30000);
+          console.log(`Reconnecting in ${delay / 1000}s… (attempt ${reconnectCount}/${MAX_RECONNECTS})`);
+          setTimeout(() => connect(), delay);
         } else {
           console.log("❌ Logged out. Delete .baileys_auth/ and re-run to re-link.");
           process.exit(1);
