@@ -1119,30 +1119,34 @@ class TestUpdateListingFolder(unittest.TestCase):
 
     def test_updates_price_in_info_json(self):
         folder = self._make_folder(price=900)
+        old_info = rs.normalise({"title": "Studio", "price_usd": 900, "url": "https://x.com"}, "craigslist")
         updated = rs.normalise({"title": "Studio", "price_usd": 1050, "url": "https://x.com"}, "craigslist")
-        rs.update_listing_folder(folder, updated, old_price=900)
+        rs.update_listing_folder(folder, updated, old_info)
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["price_usd"], 1050)
 
     def test_preserves_local_photos(self):
         folder = self._make_folder(photos=["photo_01.jpg", "photo_02.jpg"])
+        old_info = rs.normalise({"title": "Studio", "price_usd": 900}, "craigslist")
         updated = rs.normalise({"title": "Studio", "price_usd": 1050}, "craigslist")
-        rs.update_listing_folder(folder, updated, old_price=900)
+        rs.update_listing_folder(folder, updated, old_info)
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["localPhotos"], ["photo_01.jpg", "photo_02.jpg"])
 
     def test_regenerates_html(self):
         folder = self._make_folder(price=900)
+        old_info = rs.normalise({"title": "Studio", "price_usd": 900}, "craigslist")
         updated = rs.normalise({"title": "Studio", "price_usd": 1050}, "craigslist")
-        rs.update_listing_folder(folder, updated, old_price=900)
+        rs.update_listing_folder(folder, updated, old_info)
         html = (folder / "listing.html").read_text()
         self.assertIn("$1050", html)
         self.assertNotIn("$900", html)
 
     def test_price_drop_also_updates(self):
         folder = self._make_folder(price=1200)
+        old_info = rs.normalise({"title": "Studio", "price_usd": 1200}, "craigslist")
         updated = rs.normalise({"title": "Studio", "price_usd": 950}, "craigslist")
-        rs.update_listing_folder(folder, updated, old_price=1200)
+        rs.update_listing_folder(folder, updated, old_info)
         data = json.loads((folder / "info.json").read_text())
         self.assertEqual(data["price_usd"], 950)
 

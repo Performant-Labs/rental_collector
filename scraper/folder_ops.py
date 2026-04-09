@@ -58,7 +58,7 @@ def _scan_existing(source: str) -> dict:
     # Second pass: build the lookup index.
     index: dict = {}
     for entry in entries:
-        d = entry.pop("data")
+        d = entry["data"]   # keep data in entry for change detection
         url = d.get("url")
         # Only use URL as a key when it uniquely identifies one folder.
         if url and url_counts.get(url, 0) == 1:
@@ -165,15 +165,46 @@ def save_listing_folder(listing: dict, index: int) -> Path:
     return folder
 
 
-def update_listing_folder(folder: Path, listing: dict, old_price: Optional[int]):
-    """Rewrite info.json and listing.html in an existing folder with a new price."""
+def update_listing_folder(folder: Path, listing: dict, old_info: dict) -> bool:
+    """Update info.json and listing.html in an existing folder.
+
+    Always stamps ``last_checked = TODAY``.
+    Stamps ``last_updated = TODAY`` when any tracked field has changed.
+    Never overwrites the original ``scraped`` date.
+    Never modifies ``status`` (that is the archiver\'s job).
+
+    Returns True if content changed (last_updated bumped), False if only
+    last_checked was refreshed.
+    """
+    from shared.config import TODAY
+
     try:
         existing_info = json.loads((folder / "info.json").read_text(encoding="utf-8"))
     except Exception:
         existing_info = {}
 
+    # Fields tracked for content-change detection
+    TRACKED = ("price_usd", "description", "photo_url", "amenities")
+    changed_fields = [
+        f for f in TRACKED
+        if old_info.get(f) != listing.get(f)
+    ]
+
     local_photos = existing_info.get("localPhotos") or []
-    updated = {**listing, "localPhotos": local_photos}
+
+    updated = {
+        **listing,
+        "localPhotos":  local_photos,
+        # scraped is immutable — preserve the original value
+        "scraped":      existing_info.get("scraped") or listing.get("scraped"),
+        # status is the archiver\'s job — preserve existing
+        "status":       existing_info.get("status") or listing.get("status") or "active",
+        # timestamps
+        "last_checked": TODAY,
+        "last_updated": TODAY if changed_fields else (
+            existing_info.get("last_updated") or listing.get("last_updated") or TODAY
+        ),
+    }
 
     (folder / "info.json").write_text(
         json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -181,8 +212,15 @@ def update_listing_folder(folder: Path, listing: dict, old_price: Optional[int])
     (folder / "listing.html").write_text(
         generate_listing_html(updated), encoding="utf-8"
     )
-    new_price = listing.get("price_usd")
-    print(f"  \u21ba price update: ${old_price} \u2192 ${new_price}  ({folder.name}/)")
+
+    if changed_fields:
+        if "price_usd" in changed_fields:
+            print(f"  \u21ba price update: ${old_info.get('price_usd')} \u2192 ${listing.get('price_usd')}  ({folder.name}/)")
+        else:
+            print(f"  \u21ba content update ({', '.join(changed_fields)})  ({folder.name}/)")
+        return True
+
+    return False
 
 
 # Phrases that indicate a listing page is no longer active.
@@ -252,14 +290,16 @@ def save_listing_folders(listings: List[dict]):
                 continue
             save_listing_folder(listing, start_index + new_count)
             new_count += 1
-        elif listing.get("price_usd") != match["price"]:
+        else:
+            # Always call update so last_checked is stamped, even if nothing changed
             if not is_listing_active(url):
-                print(f"  \u2717 inactive \u2014 skipping price update: {listing.get('title', '')[:60]}")
+                print(f"  \u2717 inactive \u2014 skipping update: {listing.get('title', '')[:60]}")
                 skipped_count += 1
                 continue
-            update_listing_folder(match["folder"], listing, match["price"])
-            updated_count += 1
-        # else: identical — skip
+            old_info = match.get("data") or {}
+            changed = update_listing_folder(match["folder"], listing, old_info)
+            if changed:
+                updated_count += 1
 
     parts = []
     if new_count:
