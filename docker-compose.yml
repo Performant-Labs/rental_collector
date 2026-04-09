@@ -5,6 +5,7 @@ services:
       dockerfile: dashboard/Dockerfile
     working_dir: /app
     command: uvicorn dashboard.app.main:app --host 0.0.0.0 --port 8000 --reload
+    restart: unless-stopped
     ports:
       - "8000:8000"
     volumes:
@@ -25,6 +26,7 @@ services:
 
   meilisearch:
     image: getmeili/meilisearch:v1.12
+    restart: unless-stopped
     ports:
       - "7700:7700"
     environment:
