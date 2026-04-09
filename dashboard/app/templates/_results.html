@@ -1,7 +1,12 @@
 {% if search.results %}
   <div class="results-grid">
     {% for listing in search.results %}
-      <article class="card" {% if listing.photos %}data-photos="{{ listing.photos | join(',') }}"{% endif %}>
+      {% set is_archived = listing.status == "archived" %}
+      <article
+        class="card{% if is_archived %} card--archived{% endif %}"
+        data-status="{{ listing.status or 'active' }}"
+        {% if listing.photos %}data-photos="{{ listing.photos | join(',') }}"{% endif %}
+      >
 
         {# --- Photo thumbnail + hover gallery --- #}
         {% if listing.photos %}
@@ -23,14 +28,30 @@
         {# --- Card body --- #}
         <h3>{{ listing.title or "Untitled" }}</h3>
         <div class="muted">{{ listing.location or "Todos Santos" }}</div>
-        {% if listing.source %}<div class="pill" data-source="{{ listing.source }}">{{ listing.source }}</div>{% endif %}
+
+        {# --- Badges row --- #}
+        <div class="card-badges">
+          {% if listing.source %}
+            <div class="pill" data-source="{{ listing.source }}">{{ listing.source }}</div>
+          {% endif %}
+          {% if is_archived %}
+            <div class="pill pill--archived">Archived</div>
+          {% endif %}
+        </div>
+
+        {# --- Price --- #}
         <div style="margin-top:8px;">
           {% if listing.price_usd %}
-            <strong>${{ listing.price_usd }}/mo</strong>
+            {% if is_archived %}
+              <span class="muted">Last seen at <strong>${{ listing.price_usd }}/mo</strong></span>
+            {% else %}
+              <strong>${{ listing.price_usd }}/mo</strong>
+            {% endif %}
           {% else %}
             <span class="muted">Price unknown</span>
           {% endif %}
         </div>
+
         <div style="margin-top:8px;">
           <a href="/{{ listing.listing_path }}" target="_blank" rel="noopener noreferrer">Open listing</a>
         </div>

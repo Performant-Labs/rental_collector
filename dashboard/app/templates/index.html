@@ -64,6 +64,29 @@
         .controls { grid-template-columns: 1fr; }
         .layout { grid-template-columns: 1fr; }
       }
+
+      /* ── Archived listing styles ─────────────────────────────────────── */
+      .card--archived { opacity: 0.6; }
+      .card--archived .card-thumb { filter: grayscale(60%); }
+
+      /* Archived pill (grey) */
+      .pill--archived {
+        background: #6b7280;
+        color: #fff;
+        font-size: 11px;
+        padding: 2px 7px;
+      }
+
+      /* Status pill in facet sidebar */
+      .status-pill { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+      .status-pill--archived { background: #e5e7eb; color: #374151; }
+
+      /* Badge row in cards */
+      .card-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+
+      /* Status facet group accent border */
+      .facet-group--status { border-left: 3px solid #d1d5db; padding-left: 8px; }
+      .facet-count { margin: 8px 0 14px; }
     </style>
   </head>
   <body>

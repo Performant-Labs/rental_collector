@@ -1,6 +1,36 @@
-<div class="muted">{{ search.total_hits }} result(s)</div>
+{% set status_buckets = search.facets.get("status", {}) %}
+{% set selected_statuses = search.selected_filters.get("status", []) %}
+
+{# ── Status facet — always shown at the top ─────────────────────────── #}
+<div class="facet-group facet-group--status">
+  <h4>Status</h4>
+  {% for value, count in status_buckets|dictsort %}
+    {% set checked = value in selected_statuses %}
+    <label class="facet-option">
+      <span>
+        <input
+          type="checkbox"
+          name="status"
+          value="{{ value }}"
+          data-facet-field="status"
+          data-facet-value="{{ value }}"
+          {% if checked %}checked{% endif %}
+        />
+        {% if value == "archived" %}
+          <span class="status-pill status-pill--archived">Archived</span>
+        {% else %}
+          {{ value | capitalize }}
+        {% endif %}
+      </span>
+      <span class="muted">{{ count }}</span>
+    </label>
+  {% endfor %}
+</div>
+
+<div class="muted facet-count">{{ search.total_hits }} result(s)</div>
 
 {% for field in facet_fields %}
+  {% if field == "status" %}{% continue %}{% endif %}
   {% set buckets = search.facets.get(field, {}) %}
   {% if buckets %}
     <div class="facet-group">

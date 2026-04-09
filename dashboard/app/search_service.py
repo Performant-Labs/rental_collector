@@ -7,6 +7,7 @@ from typing import Any
 from dashboard.app.meilisearch_index_client import MeilisearchIndexClient
 
 FACET_FIELDS = (
+    "status",
     "source",
     "price_bucket",
     "location",
@@ -81,6 +82,12 @@ def _normalise_filter_value(field: str, value: str) -> str:
 
 def build_filter_expression(facet_filters: dict[str, list[str]]) -> str | None:
     groups: list[str] = []
+
+    # Default to active-only when no status filter is explicitly set.
+    # This means the home page shows only active listings out of the box.
+    status_values = [v.strip() for v in facet_filters.get("status", []) if v.strip()]
+    if not status_values:
+        groups.append('status = "active"')
 
     for field in sorted(FACET_FIELDS):
         raw_values = facet_filters.get(field, [])
